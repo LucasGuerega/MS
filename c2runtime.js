@@ -1778,7 +1778,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.lastMV = mat4.create();
 		this.currentMV = mat4.create();
 		this.gl = gl;
-		this.version = (this.gl.getParameter(this.gl.VERSION).indexOf("WebGL 2") === 0 ? 2 : 1);
 		this.initState();
 	};
 	GLWrap_.prototype.initState = function ()
@@ -2047,19 +2046,19 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		gl.compileShader(fragmentShader);
 		if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS))
 		{
-			var compilationlog = gl.getShaderInfoLog(fragmentShader);
+;
 			gl.deleteShader(fragmentShader);
-			throw new Error("error compiling fragment shader: " + compilationlog);
+			return null;
 		}
 		var vertexShader = gl.createShader(gl.VERTEX_SHADER);
 		gl.shaderSource(vertexShader, vsSource);
 		gl.compileShader(vertexShader);
 		if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS))
 		{
-			var compilationlog = gl.getShaderInfoLog(vertexShader);
+;
 			gl.deleteShader(fragmentShader);
 			gl.deleteShader(vertexShader);
-			throw new Error("error compiling vertex shader: " + compilationlog);
+			return null;
 		}
 		var shaderProgram = gl.createProgram();
 		gl.attachShader(shaderProgram, fragmentShader);
@@ -2067,11 +2066,11 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		gl.linkProgram(shaderProgram);
 		if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
 		{
-			var compilationlog = gl.getProgramInfoLog(shaderProgram);
+;
 			gl.deleteShader(fragmentShader);
 			gl.deleteShader(vertexShader);
 			gl.deleteProgram(shaderProgram);
-			throw new Error("error linking shader program: " + compilationlog);
+			return null;
 		}
 		gl.useProgram(shaderProgram);
 		gl.deleteShader(fragmentShader);
@@ -3207,22 +3206,16 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				break;
 			}
 		}
-		if (this.version === 1 && !isPOT && tiling)
+		if (!isPOT && tiling)
 		{
 			var canvas = document.createElement("canvas");
 			canvas.width = cr.nextHighestPowerOfTwo(img.width);
 			canvas.height = cr.nextHighestPowerOfTwo(img.height);
 			var ctx = canvas.getContext("2d");
-			if (typeof ctx["imageSmoothingEnabled"] !== "undefined")
-			{
-				ctx["imageSmoothingEnabled"] = linearsampling;
-			}
-			else
-			{
-				ctx["webkitImageSmoothingEnabled"] = linearsampling;
-				ctx["mozImageSmoothingEnabled"] = linearsampling;
-				ctx["msImageSmoothingEnabled"] = linearsampling;
-			}
+			ctx["webkitImageSmoothingEnabled"] = linearsampling;
+			ctx["mozImageSmoothingEnabled"] = linearsampling;
+			ctx["msImageSmoothingEnabled"] = linearsampling;
+			ctx["imageSmoothingEnabled"] = linearsampling;
 			ctx.drawImage(img,
 						  0, 0, img.width, img.height,
 						  0, 0, canvas.width, canvas.height);
@@ -3256,7 +3249,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		if (linearsampling)
 		{
 			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-			if ((isPOT || this.version >= 2) && this.enable_mipmaps && !nomip)
+			if (isPOT && this.enable_mipmaps && !nomip)
 			{
 				gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
 				gl.generateMipmap(gl.TEXTURE_2D);
@@ -3458,7 +3451,13 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		{
 			this.isMobile = /(blackberry|bb10|playbook|palm|symbian|nokia|windows\s+ce|phone|mobile|tablet|kindle|silk)/i.test(navigator.userAgent);
 		}
-		this.isWKWebView = !!(this.isiOS && this.isCordova && window["webkit"]);
+		this.isWKWebView = !!(this.isiOS && this.isCordova && window.indexedDB);
+		this.httpServer = null;
+		this.httpServerUrl = "";
+		if (this.isWKWebView)
+		{
+			this.httpServer = (cordova && cordova["plugins"] && cordova["plugins"]["CorHttpd"]) ? cordova["plugins"]["CorHttpd"] : null;
+		}
 		if (typeof cr_is_preview !== "undefined" && !this.isNWjs && (window.location.search === "?nw" || /nodewebkit/i.test(navigator.userAgent) || /nwjs/i.test(navigator.userAgent)))
 		{
 			this.isNWjs = true;
@@ -3472,12 +3471,12 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.enableFrontToBack = false;
 		this.earlyz_index = 0;
 		this.ctx = null;
+		this.fullscreenOldMarginCss = "";
 		this.firstInFullscreen = false;
 		this.oldWidth = 0;		// for restoring non-fullscreen canvas after fullscreen
 		this.oldHeight = 0;
 		this.canvas.oncontextmenu = function (e) { if (e.preventDefault) e.preventDefault(); return false; };
 		this.canvas.onselectstart = function (e) { if (e.preventDefault) e.preventDefault(); return false; };
-		this.canvas.ontouchstart = function (e) { if(e.preventDefault) e.preventDefault(); return false; };
 		if (this.isDirectCanvas)
 			window["c2runtime"] = this;
 		if (this.isNWjs)
@@ -3499,7 +3498,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.cssHeight = this.height;
 		this.lastWindowWidth = window.innerWidth;
 		this.lastWindowHeight = window.innerHeight;
-		this.forceCanvasAlpha = false;		// note: now unused, left for backwards compat since plugins could modify it
+		this.forceCanvasAlpha = false;		// allow plugins to force the canvas to display with alpha channel
 		this.redraw = true;
 		this.isSuspended = false;
 		if (!Date.now) {
@@ -3532,7 +3531,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.isLoadingState = false;
 		this.saveToSlot = "";
 		this.loadFromSlot = "";
-		this.loadFromJson = null;			// set to string when there is something to try to load
+		this.loadFromJson = "";
 		this.lastSaveJson = "";
 		this.signalledContinuousPreview = false;
 		this.suspendDrawing = false;		// for hiding display until continuous preview loads
@@ -3549,7 +3548,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.fps = 0;
 		this.last_fps_time = 0;
 		this.tickcount = 0;
-		this.tickcount_nosave = 0;	// same as tickcount but never saved/loaded
 		this.execcount = 0;
 		this.framecount = 0;        // for fps
 		this.objectcount = 0;
@@ -3613,12 +3611,22 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		var self = this;
 		if (this.isWKWebView)
 		{
-			this.fetchLocalFileViaCordovaAsText("data.js", function (str)
+			this.httpServer["startServer"]({
+				"port": 0,
+				"localhost_only": true
+			}, function (url)
 			{
-				self.loadProject(JSON.parse(str));
+				self.httpServerUrl = url;
+				self.fetchLocalFileViaCordovaAsText("data.js", function (str)
+				{
+					self.loadProject(JSON.parse(str));
+				}, function (err)
+				{
+					alert("Error fetching data.js");
+				});
 			}, function (err)
 			{
-				alert("Error fetching data.js");
+				alert("error starting local server: " + err);
 			});
 			return;
 		}
@@ -3705,50 +3713,25 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.devicePixelRatio = (this.isRetina ? (window["devicePixelRatio"] || window["webkitDevicePixelRatio"] || window["mozDevicePixelRatio"] || window["msDevicePixelRatio"] || 1) : 1);
 		this.ClearDeathRow();
 		var attribs;
+		var alpha_canvas = !!(this.forceCanvasAlpha || (this.alphaBackground && !(this.isNWjs || this.isWinJS || this.isWindowsPhone8 || this.isCrosswalk || this.isCordova || this.isAmazonWebApp)));
 		if (this.fullscreen_mode > 0)
 			this["setSize"](window.innerWidth, window.innerHeight, true);
-		this.canvas.addEventListener("webglcontextlost", function (ev) {
-			ev.preventDefault();
-			self.onContextLost();
-			cr.logexport("[Construct 2] WebGL context lost");
-			window["cr_setSuspended"](true);		// stop rendering
-		}, false);
-		this.canvas.addEventListener("webglcontextrestored", function (ev) {
-			self.glwrap.initState();
-			self.glwrap.setSize(self.glwrap.width, self.glwrap.height, true);
-			self.layer_tex = null;
-			self.layout_tex = null;
-			self.fx_tex[0] = null;
-			self.fx_tex[1] = null;
-			self.onContextRestored();
-			self.redraw = true;
-			cr.logexport("[Construct 2] WebGL context restored");
-			window["cr_setSuspended"](false);		// resume rendering
-		}, false);
 		try {
 			if (this.enableWebGL && (this.isCocoonJs || this.isEjecta || !this.isDomFree))
 			{
 				attribs = {
-					"alpha": true,
+					"alpha": alpha_canvas,
 					"depth": false,
 					"antialias": false,
-					"powerPreference": "high-performance",
 					"failIfMajorPerformanceCaveat": true
 				};
-				if (!this.isAndroid)
-					this.gl = this.canvas.getContext("webgl2", attribs);
-				if (!this.gl)
-				{
-					this.gl = (this.canvas.getContext("webgl", attribs) ||
-							   this.canvas.getContext("experimental-webgl", attribs));
-				}
+				this.gl = (this.canvas.getContext("webgl", attribs) || this.canvas.getContext("experimental-webgl", attribs));
 			}
 		}
 		catch (e) {
 		}
 		if (this.gl)
 		{
-			var isWebGL2 = (this.gl.getParameter(this.gl.VERSION).indexOf("WebGL 2") === 0);
 			var debug_ext = this.gl.getExtension("WEBGL_debug_renderer_info");
 			if (debug_ext)
 			{
@@ -3776,6 +3759,24 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			this.glwrap.setSize(this.canvas.width, this.canvas.height);
 			this.glwrap.enable_mipmaps = (this.downscalingQuality !== 0);
 			this.ctx = null;
+			this.canvas.addEventListener("webglcontextlost", function (ev) {
+				ev.preventDefault();
+				self.onContextLost();
+				cr.logexport("[Construct 2] WebGL context lost");
+				window["cr_setSuspended"](true);		// stop rendering
+			}, false);
+			this.canvas.addEventListener("webglcontextrestored", function (ev) {
+				self.glwrap.initState();
+				self.glwrap.setSize(self.glwrap.width, self.glwrap.height, true);
+				self.layer_tex = null;
+				self.layout_tex = null;
+				self.fx_tex[0] = null;
+				self.fx_tex[1] = null;
+				self.onContextRestored();
+				self.redraw = true;
+				cr.logexport("[Construct 2] WebGL context restored");
+				window["cr_setSuspended"](false);		// resume rendering
+			}, false);
 			for (i = 0, len = this.types_by_index.length; i < len; i++)
 			{
 				t = this.types_by_index[i];
@@ -3839,18 +3840,21 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				{
 					attribs = {
 						"antialias": !!this.linearSampling,
-						"alpha": true
+						"alpha": alpha_canvas
 					};
 					this.ctx = this.canvas.getContext("2d", attribs);
 				}
 				else
 				{
 					attribs = {
-						"alpha": true
+						"alpha": alpha_canvas
 					};
 					this.ctx = this.canvas.getContext("2d", attribs);
 				}
-				this.setCtxImageSmoothingEnabled(this.ctx, this.linearSampling);
+				this.ctx["webkitImageSmoothingEnabled"] = this.linearSampling;
+				this.ctx["mozImageSmoothingEnabled"] = this.linearSampling;
+				this.ctx["msImageSmoothingEnabled"] = this.linearSampling;
+				this.ctx["imageSmoothingEnabled"] = this.linearSampling;
 			}
 			this.overlay_canvas = null;
 			this.overlay_ctx = null;
@@ -3883,9 +3887,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				});
 				jQuery(window).blur(function ()
 				{
-					var parent = window.parent;
-					if (!parent || !parent.document.hasFocus())
-						self["setSuspended"](true);
+					self["setSuspended"](true);
 				});
 			}
 		}
@@ -3903,7 +3905,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 					catch (e) {}
 				}
 			}
-			if (typeof PointerEvent !== "undefined")
+			if (window.navigator["pointerEnabled"])
 			{
 				document.addEventListener("pointerdown", unfocusFormControlFunc);
 			}
@@ -3941,7 +3943,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || !!document["msFullscreenElement"] || document["fullScreen"] || this.isNodeFullscreen) && !this.isCordova;
 		if (!isfullscreen && this.fullscreen_mode === 0 && !force)
 			return;			// ignore size events when not fullscreen and not using a fullscreen-in-browser mode
-		if (isfullscreen)
+		if (isfullscreen && this.fullscreen_scaling > 0)
 			mode = this.fullscreen_scaling;
 		var dpr = this.devicePixelRatio;
 		if (mode >= 4)
@@ -3994,8 +3996,13 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 					h = newh;
 				}
 			}
+			if (isfullscreen && !this.isNWjs)
+			{
+				offx = 0;
+				offy = 0;
+			}
 		}
-		else if (isfullscreen && mode === 0)
+		else if (this.isNWjs && this.isNodeFullscreen && this.fullscreen_mode_set === 0)
 		{
 			offx = Math.floor((w - this.original_width) / 2);
 			offy = Math.floor((h - this.original_height) / 2);
@@ -4101,7 +4108,10 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		}
 		if (this.ctx)
 		{
-			this.setCtxImageSmoothingEnabled(this.ctx, this.linearSampling);
+			this.ctx["webkitImageSmoothingEnabled"] = this.linearSampling;
+			this.ctx["mozImageSmoothingEnabled"] = this.linearSampling;
+			this.ctx["msImageSmoothingEnabled"] = this.linearSampling;
+			this.ctx["imageSmoothingEnabled"] = this.linearSampling;
 		}
 		this.tryLockOrientation();
 		if (this.isiPhone && !this.isCordova)
@@ -4118,7 +4128,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			orientation = "landscape";
 		try {
 			if (screen["orientation"] && screen["orientation"]["lock"])
-				screen["orientation"]["lock"](orientation).catch(function(){});
+				screen["orientation"]["lock"](orientation);
 			else if (screen["lockOrientation"])
 				screen["lockOrientation"](orientation);
 			else if (screen["webkitLockOrientation"])
@@ -4285,7 +4295,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			plugin = new p(this);
 			plugin.singleglobal = m[1];
 			plugin.is_world = m[2];
-			plugin.is_rotatable = m[5];
 			plugin.must_predraw = m[9];
 			if (plugin.onCreate)
 				plugin.onCreate();  // opportunity to override default ACEs
@@ -4541,7 +4550,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.aspect_scale = 1.0;
 		this.enableWebGL = pm[13];
 		this.linearSampling = pm[14];
-		this.clearBackground = pm[15];
+		this.alphaBackground = pm[15];
 		this.versionstr = pm[16];
 		this.useHighDpi = pm[17];
 		this.orientations = pm[20];		// 0 = any, 1 = portrait, 2 = landscape
@@ -4558,32 +4567,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.initRendererAndLoader();
 	};
 	var anyImageHadError = false;
-	var MAX_PARALLEL_IMAGE_LOADS = 100;
-	var currentlyActiveImageLoads = 0;
-	var imageLoadQueue = [];		// array of [img, srcToSet]
-	Runtime.prototype.queueImageLoad = function (img_, src_)
-	{
-		var self = this;
-		var doneFunc = function ()
-		{
-			currentlyActiveImageLoads--;
-			self.maybeLoadNextImages();
-		};
-		img_.addEventListener("load", doneFunc);
-		img_.addEventListener("error", doneFunc);
-		imageLoadQueue.push([img_, src_]);
-		this.maybeLoadNextImages();
-	};
-	Runtime.prototype.maybeLoadNextImages = function ()
-	{
-		var next;
-		while (imageLoadQueue.length && currentlyActiveImageLoads < MAX_PARALLEL_IMAGE_LOADS)
-		{
-			currentlyActiveImageLoads++;
-			next = imageLoadQueue.shift();
-			this.setImageSrc(next[0], next[1]);
-		}
-	};
 	Runtime.prototype.waitForImageLoad = function (img_, src_)
 	{
 		img_["cocoonLazyLoad"] = true;
@@ -4616,7 +4599,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			else
 			{
 				img_.crossOrigin = "anonymous";			// required for Arcade sandbox compatibility
-				this.queueImageLoad(img_, src_);		// use a queue to avoid requesting all images simultaneously
+				this.setImageSrc(img_, src_);			// work around WKWebView problems
 			}
 		}
 		this.wait_for_textures.push(img_);
@@ -4684,12 +4667,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		var ctx = this.ctx || this.overlay_ctx;
 		if (this.overlay_canvas)
 			this.positionOverlayCanvas();
-		var curwidth = window.innerWidth;
-		var curheight = window.innerHeight;
-		if (this.lastWindowWidth !== curwidth || this.lastWindowHeight !== curheight)
-		{
-			this["setSize"](curwidth, curheight);
-		}
 		this.progress = 0;
 		this.last_progress = -1;
 		var self = this;
@@ -4947,8 +4924,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		{
 			this.loadingprogress = 1;
 			this.trigger(cr.system_object.prototype.cnds.OnLoadFinished, null);
-			if (window["C2_RegisterSW"])		// note not all platforms use SW
-				window["C2_RegisterSW"]();
 		}
 		if (navigator["splashscreen"] && navigator["splashscreen"]["hide"])
 			navigator["splashscreen"]["hide"]();
@@ -5005,12 +4980,27 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			if (isfullscreen)
 			{
 				if (!this.firstInFullscreen)
+				{
+					this.fullscreenOldMarginCss = jQuery(this.canvas).css("margin") || "0";
 					this.firstInFullscreen = true;
+				}
+				if (!this.isChrome && !this.isNWjs)
+				{
+					jQuery(this.canvas).css({
+						"margin-left": "" + Math.floor((screen.width - (this.width / this.devicePixelRatio)) / 2) + "px",
+						"margin-top": "" + Math.floor((screen.height - (this.height / this.devicePixelRatio)) / 2) + "px"
+					});
+				}
 			}
 			else
 			{
 				if (this.firstInFullscreen)
 				{
+					if (!this.isChrome && !this.isNWjs)
+					{
+						jQuery(this.canvas).css("margin", this.fullscreenOldMarginCss);
+					}
+					this.fullscreenOldMarginCss = "";
 					this.firstInFullscreen = false;
 					if (this.fullscreen_mode === 0)
 					{
@@ -5033,8 +5023,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				this.isloading = false;
 				this.progress = 1;
 				this.trigger(cr.system_object.prototype.cnds.OnLoadFinished, null);
-				if (window["C2_RegisterSW"])
-					window["C2_RegisterSW"]();
 			}
 		}
 		this.logic(raf_time);
@@ -5060,7 +5048,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		if (!this.hit_breakpoint)
 		{
 			this.tickcount++;
-			this.tickcount_nosave++;
 			this.execcount++;
 			this.framecount++;
 		}
@@ -5079,14 +5066,12 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			this.cpuutilisation = this.logictime;
 			this.logictime = 0;
 		}
-		var wallDt = 0;
 		if (this.last_tick_time !== 0)
 		{
 			var ms_diff = cur_time - this.last_tick_time;
 			if (ms_diff < 0)
 				ms_diff = 0;
-			wallDt = ms_diff / 1000.0; // dt measured in seconds
-			this.dt1 = wallDt;
+			this.dt1 = ms_diff / 1000.0; // dt measured in seconds
 			if (this.dt1 > 0.5)
 				this.dt1 = 0;
 			else if (this.dt1 > 1 / this.minimumFramerate)
@@ -5095,7 +5080,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		this.last_tick_time = cur_time;
         this.dt = this.dt1 * this.timescale;
         this.kahanTime.add(this.dt);
-		this.wallTime.add(wallDt);		// prevent min/max framerate affecting wall clock
+		this.wallTime.add(this.dt1);
 		var isfullscreen = (document["mozFullScreen"] || document["webkitIsFullScreen"] || document["fullScreen"] || !!document["msFullscreenElement"] || this.isNodeFullscreen) && !this.isCordova;
 		if (this.fullscreen_mode >= 2 /* scale */ || (isfullscreen && this.fullscreen_scaling > 0))
 		{
@@ -5942,8 +5927,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 	{
 		var sol = type.getCurrentSol();
 		var i, j, inst, len;
-		var orblock = this.getCurrentEventStack().current_event.orblock;
-		var lx, ly, arr;
+		var lx, ly;
 		if (sol.select_all)
 		{
 			if (!inverted)
@@ -5964,17 +5948,14 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 					else
 						sol.instances.push(inst);
 				}
-				else if (orblock)
-					sol.else_instances.push(inst);
 			}
 		}
 		else
 		{
 			j = 0;
-			arr = (orblock ? sol.else_instances : sol.instances);
-			for (i = 0, len = arr.length; i < len; i++)
+			for (i = 0, len = sol.instances.length; i < len; i++)
 			{
-				inst = arr[i];
+				inst = sol.instances[i];
 				inst.update_bbox();
 				lx = inst.layer.canvasToLayer(ptx, pty, true);
 				ly = inst.layer.canvasToLayer(ptx, pty, false);
@@ -5982,8 +5963,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				{
 					if (inverted)
 						return false;
-					else if (orblock)
-						sol.instances.push(inst);
 					else
 					{
 						sol.instances[j] = sol.instances[i];
@@ -5992,7 +5971,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				}
 			}
 			if (!inverted)
-				arr.length = j;
+				sol.instances.length = j;
 		}
 		type.applySolToContainer();
 		if (inverted)
@@ -6424,43 +6403,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		inst.set_bbox_changed();
 		return false;
 	};
-	Runtime.prototype.pushOutSolidAxis = function(inst, xdir, ydir, dist)
-	{
-		dist = dist || 50;
-		var oldX = inst.x;
-		var oldY = inst.y;
-		var lastOverlapped = null;
-		var secondLastOverlapped = null;
-		var i, which, sign;
-		for (i = 0; i < dist; ++i)
-		{
-			for (which = 0; which < 2; ++which)
-			{
-				sign = which * 2 - 1;		// -1 or 1
-				inst.x = oldX + (xdir * i * sign);
-				inst.y = oldY + (ydir * i * sign);
-				inst.set_bbox_changed();
-				if (!this.testOverlap(inst, lastOverlapped))
-				{
-					lastOverlapped = this.testOverlapSolid(inst);
-					if (lastOverlapped)
-					{
-						secondLastOverlapped = lastOverlapped;
-					}
-					else
-					{
-						if (secondLastOverlapped)
-							this.pushInFractional(inst, xdir * sign, ydir * sign, secondLastOverlapped, 16);
-						return true;
-					}
-				}
-			}
-		}
-		inst.x = oldX;
-		inst.y = oldY;
-		inst.set_bbox_changed();
-		return false;
-	};
 	Runtime.prototype.pushOut = function (inst, xdir, ydir, dist, otherinst)
 	{
 		var push_dist = dist || 50;
@@ -6560,39 +6502,13 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			return;
 		this.registered_collisions.push([a, b]);
 	};
-	Runtime.prototype.addRegisteredCollisionCandidates = function (inst, otherType, arr)
-	{
-		var i, len, r, otherInst;
-		for (i = 0, len = this.registered_collisions.length; i < len; ++i)
-		{
-			r = this.registered_collisions[i];
-			if (r[0] === inst)
-				otherInst = r[1];
-			else if (r[1] === inst)
-				otherInst = r[0];
-			else
-				continue;
-			if (otherType.is_family)
-			{
-				if (otherType.members.indexOf(otherType) === -1)
-					continue;
-			}
-			else
-			{
-				if (otherInst.type !== otherType)
-					continue;
-			}
-			if (arr.indexOf(otherInst) === -1)
-				arr.push(otherInst);
-		}
-	};
 	Runtime.prototype.checkRegisteredCollision = function (a, b)
 	{
 		var i, len, x;
 		for (i = 0, len = this.registered_collisions.length; i < len; i++)
 		{
 			x = this.registered_collisions[i];
-			if ((x[0] === a && x[1] === b) || (x[0] === b && x[1] === a))
+			if ((x[0] == a && x[1] == b) || (x[0] == b && x[1] == a))
 				return true;
 		}
 		return false;
@@ -7079,7 +6995,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 					catch (f)
 					{
 						cr.logexport("Failed to save game state: " + e + "; " + f);
-						self.trigger(cr.system_object.prototype.cnds.OnSaveFailed, null);
 					}
 				});
 			}
@@ -7097,12 +7012,11 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				catch (e)
 				{
 					cr.logexport("Error saving to WebStorage: " + e);
-					self.trigger(cr.system_object.prototype.cnds.OnSaveFailed, null);
 				}
 			}
 			this.saveToSlot = "";
 			this.loadFromSlot = "";
-			this.loadFromJson = null;
+			this.loadFromJson = "";
 		}
 		if (loadingFromSlot.length)
 		{
@@ -7121,21 +7035,15 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 						cr.logexport("Loaded state from WebStorage (" + self.loadFromJson.length + " bytes)");
 					}
 					self.suspendDrawing = false;
-					if (!self.loadFromJson)
-					{
-						self.loadFromJson = null;
+					if (!self.loadFromJson.length)
 						self.trigger(cr.system_object.prototype.cnds.OnLoadFailed, null);
-					}
 				}, function (e)
 				{
 					self.loadFromJson = localStorage.getItem("__c2save_" + loadingFromSlot) || "";
 					cr.logexport("Loaded state from WebStorage (" + self.loadFromJson.length + " bytes)");
 					self.suspendDrawing = false;
-					if (!self.loadFromJson)
-					{
-						self.loadFromJson = null;
+					if (!self.loadFromJson.length)
 						self.trigger(cr.system_object.prototype.cnds.OnLoadFailed, null);
-					}
 				});
 			}
 			else
@@ -7146,33 +7054,23 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 				}
 				catch (e)
 				{
-					this.loadFromJson = null;
+					this.loadFromJson = "";
 				}
 				this.suspendDrawing = false;
-				if (!self.loadFromJson)
-				{
-					self.loadFromJson = null;
+				if (!self.loadFromJson.length)
 					self.trigger(cr.system_object.prototype.cnds.OnLoadFailed, null);
-				}
 			}
 			this.loadFromSlot = "";
 			this.saveToSlot = "";
 		}
-		if (this.loadFromJson !== null)
+		if (this.loadFromJson.length)
 		{
 			this.ClearDeathRow();
-			var ok = this.loadFromJSONString(this.loadFromJson);
-			if (ok)
-			{
-				this.lastSaveJson = this.loadFromJson;
-				this.trigger(cr.system_object.prototype.cnds.OnLoadComplete, null);
-				this.lastSaveJson = "";
-			}
-			else
-			{
-				self.trigger(cr.system_object.prototype.cnds.OnLoadFailed, null);
-			}
-			this.loadFromJson = null;
+			this.loadFromJSONString(this.loadFromJson);
+			this.lastSaveJson = this.loadFromJson;
+			this.trigger(cr.system_object.prototype.cnds.OnLoadComplete, null);
+			this.lastSaveJson = "";
+			this.loadFromJson = "";
 		}
 	};
 	function CopyExtraObject(extra)
@@ -7296,17 +7194,11 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 	};
 	Runtime.prototype.loadFromJSONString = function (str)
 	{
-		var o;
-		try {
-			o = JSON.parse(str);
-		}
-		catch (e) {
-			return false;
-		}
+		var o = JSON.parse(str);
 		if (!o["c2save"])
-			return false;		// probably not a c2 save state
+			return;		// probably not a c2 save state
 		if (o["version"] > 1)
-			return false;		// from future version of c2; assume not compatible
+			return;		// from future version of c2; assume not compatible
 		this.isLoadingState = true;
 		var rt = o["rt"];
 		this.kahanTime.reset();
@@ -7467,7 +7359,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			}
 		}
 		this.redraw = true;
-		return true;
 	};
 	Runtime.prototype.saveInstanceToJSON = function(inst, state_only)
 	{
@@ -7564,7 +7455,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 	};
 	Runtime.prototype.loadInstanceFromJSON = function(inst, o, state_only)
 	{
-		var p, i, len, iv, oivs, world, fxindex, obehs, behindex, value;
+		var p, i, len, iv, oivs, world, fxindex, obehs, behindex;
 		var oldlayer;
 		var type = inst.type;
 		var plugin = type.plugin;
@@ -7589,10 +7480,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 					iv = this.getInstanceVarIndexBySid(type, parseInt(p, 10));
 					if (iv < 0 || iv >= inst.instance_vars.length)
 						continue;		// must've gone missing
-					value = oivs[p];
-					if (value === null)
-						value = NaN;
-					inst.instance_vars[iv] = value;
+					inst.instance_vars[iv] = oivs[p];
 				}
 			}
 		}
@@ -7685,40 +7573,7 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 			reader.readAsText(file);
 		}, errorCallback);
 	};
-	var queuedArrayBufferReads = [];
-	var activeArrayBufferReads = 0;
-	var MAX_ARRAYBUFFER_READS = 8;
-	Runtime.prototype.maybeStartNextArrayBufferRead = function()
-	{
-		if (!queuedArrayBufferReads.length)
-			return;		// none left
-		if (activeArrayBufferReads >= MAX_ARRAYBUFFER_READS)
-			return;		// already got maximum number in-flight
-		activeArrayBufferReads++;
-		var job = queuedArrayBufferReads.shift();
-		this.doFetchLocalFileViaCordovaAsArrayBuffer(job.filename, job.successCallback, job.errorCallback);
-	};
-	Runtime.prototype.fetchLocalFileViaCordovaAsArrayBuffer = function (filename, successCallback_, errorCallback_)
-	{
-		var self = this;
-		queuedArrayBufferReads.push({
-			filename: filename,
-			successCallback: function (result)
-			{
-				activeArrayBufferReads--;
-				self.maybeStartNextArrayBufferRead();
-				successCallback_(result);
-			},
-			errorCallback: function (err)
-			{
-				activeArrayBufferReads--;
-				self.maybeStartNextArrayBufferRead();
-				errorCallback_(err);
-			}
-		});
-		this.maybeStartNextArrayBufferRead();
-	};
-	Runtime.prototype.doFetchLocalFileViaCordovaAsArrayBuffer = function (filename, successCallback, errorCallback)
+	Runtime.prototype.fetchLocalFileViaCordovaAsArrayBuffer = function (filename, successCallback, errorCallback)
 	{
 		this.fetchLocalFileViaCordova(filename, function (file)
 		{
@@ -7732,32 +7587,16 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 	};
 	Runtime.prototype.fetchLocalFileViaCordovaAsURL = function (filename, successCallback, errorCallback)
 	{
-		var blobType = "";
-		var lowername = filename.toLowerCase();
-		var ext3 = lowername.substr(lowername.length - 4);
-		var ext4 = lowername.substr(lowername.length - 5);
-		if (ext3 === ".mp4")
-			blobType = "video/mp4";
-		else if (ext4 === ".webm")
-			blobType = "video/webm";		// use video type but hopefully works with audio too
-		else if (ext3 === ".m4a")
-			blobType = "audio/mp4";
-		else if (ext3 === ".mp3")
-			blobType = "audio/mpeg";
 		this.fetchLocalFileViaCordovaAsArrayBuffer(filename, function (arrayBuffer)
 		{
-			var blob = new Blob([arrayBuffer], { type: blobType });
+			var blob = new Blob([arrayBuffer]);
 			var url = URL.createObjectURL(blob);
 			successCallback(url);
 		}, errorCallback);
 	};
-	Runtime.prototype.isAbsoluteUrl = function (url)
-	{
-		return /^(?:[a-z]+:)?\/\//.test(url) || url.substr(0, 5) === "data:"  || url.substr(0, 5) === "blob:";
-	};
 	Runtime.prototype.setImageSrc = function (img, src)
 	{
-		if (this.isWKWebView && !this.isAbsoluteUrl(src))
+		if (this.isWKWebView)
 		{
 			this.fetchLocalFileViaCordovaAsURL(src, function (url)
 			{
@@ -7770,19 +7609,6 @@ quat4.str=function(a){return"["+a[0]+", "+a[1]+", "+a[2]+", "+a[3]+"]"};
 		else
 		{
 			img.src = src;
-		}
-	};
-	Runtime.prototype.setCtxImageSmoothingEnabled = function (ctx, e)
-	{
-		if (typeof ctx["imageSmoothingEnabled"] !== "undefined")
-		{
-			ctx["imageSmoothingEnabled"] = e;
-		}
-		else
-		{
-			ctx["webkitImageSmoothingEnabled"] = e;
-			ctx["mozImageSmoothingEnabled"] = e;
-			ctx["msImageSmoothingEnabled"] = e;
 		}
 	};
 	cr.runtime = Runtime;
@@ -7862,8 +7688,6 @@ window["cr_setSuspended"] = function(s)
 		this.angle = 0;
 		this.first_visit = true;
 		this.name = m[0];
-		this.originalWidth = m[1];
-		this.originalHeight = m[2];
 		this.width = m[1];
 		this.height = m[2];
 		this.unbounded_scrolling = m[3];
@@ -7969,11 +7793,9 @@ window["cr_setSuspended"] = function(s)
 			this.event_sheet.updateDeepIncludes();
 		}
 		this.runtime.running_layout = this;
-		this.width = this.originalWidth;
-		this.height = this.originalHeight;
 		this.scrollX = (this.runtime.original_width / 2);
 		this.scrollY = (this.runtime.original_height / 2);
-		var i, k, len, lenk, type, type_instances, initial_inst, inst, iid, t, s, p, q, type_data, layer;
+		var i, k, len, lenk, type, type_instances, inst, iid, t, s, p, q, type_data, layer;
 		for (i = 0, len = this.runtime.types_by_index.length; i < len; i++)
 		{
 			type = this.runtime.types_by_index[i];
@@ -8081,12 +7903,7 @@ window["cr_setSuspended"] = function(s)
 		}
 		for (i = 0, len = this.initial_nonworld.length; i < len; i++)
 		{
-			initial_inst = this.initial_nonworld[i];
-			type = this.runtime.types_by_index[initial_inst[1]];
-			if (!type.is_contained)
-			{
-				inst = this.runtime.createInstanceFromInit(this.initial_nonworld[i], null, true);
-			}
+			inst = this.runtime.createInstanceFromInit(this.initial_nonworld[i], null, true);
 ;
 		}
 		this.runtime.changelayout = null;
@@ -8250,12 +8067,15 @@ window["cr_setSuspended"] = function(s)
 			}
 			if (ctx_changed)
 			{
-				this.runtime.setCtxImageSmoothingEnabled(layout_ctx, this.runtime.linearSampling);
+				layout_ctx["webkitImageSmoothingEnabled"] = this.runtime.linearSampling;
+				layout_ctx["mozImageSmoothingEnabled"] = this.runtime.linearSampling;
+				layout_ctx["msImageSmoothingEnabled"] = this.runtime.linearSampling;
+				layout_ctx["imageSmoothingEnabled"] = this.runtime.linearSampling;
 			}
 		}
 		layout_ctx.globalAlpha = 1;
 		layout_ctx.globalCompositeOperation = "source-over";
-		if (this.runtime.clearBackground && !this.hasOpaqueBottomLayer())
+		if (this.runtime.alphaBackground && !this.hasOpaqueBottomLayer())
 			layout_ctx.clearRect(0, 0, this.runtime.draw_width, this.runtime.draw_height);
 		var i, len, l;
 		for (i = 0, len = this.layers.length; i < len; i++)
@@ -8336,7 +8156,7 @@ window["cr_setSuspended"] = function(s)
 				this.runtime.layout_tex = null;
 			}
 		}
-		if (this.runtime.clearBackground && !this.hasOpaqueBottomLayer())
+		if (this.runtime.alphaBackground && !this.hasOpaqueBottomLayer())
 			glw.clear(0, 0, 0, 0);
 		var i, len, l;
 		for (i = 0, len = this.layers.length; i < len; i++)
@@ -8633,22 +8453,9 @@ window["cr_setSuspended"] = function(s)
 				glw.clearRect(clearleft, y, clearright - clearleft, h);
 				if (inst)
 				{
-					var pixelWidth;
-					var pixelHeight;
-					if (inst.curFrame && inst.curFrame.texture_img)
-					{
-						var img = inst.curFrame.texture_img;
-						pixelWidth = 1.0 / img.width;
-						pixelHeight = 1.0 / img.height;
-					}
-					else
-					{
-						pixelWidth = 1.0 / inst.width;
-						pixelHeight = 1.0 / inst.height;
-					}
 					glw.setProgramParameters(rendertarget,					// backTex
-											 pixelWidth,
-											 pixelHeight,
+											 1.0 / inst.width,				// pixelWidth
+											 1.0 / inst.height,				// pixelHeight
 											 rcTex2.left, rcTex2.top,		// destStart
 											 rcTex2.right, rcTex2.bottom,	// destEnd
 											 layerScale,
@@ -9262,7 +9069,10 @@ window["cr_setSuspended"] = function(s)
 			}
 			if (ctx_changed)
 			{
-				this.runtime.setCtxImageSmoothingEnabled(layer_ctx, this.runtime.linearSampling);
+				layer_ctx["webkitImageSmoothingEnabled"] = this.runtime.linearSampling;
+				layer_ctx["mozImageSmoothingEnabled"] = this.runtime.linearSampling;
+				layer_ctx["msImageSmoothingEnabled"] = this.runtime.linearSampling;
+				layer_ctx["imageSmoothingEnabled"] = this.runtime.linearSampling;
 			}
 			if (this.transparent)
 				layer_ctx.clearRect(0, 0, this.runtime.draw_width, this.runtime.draw_height);
@@ -9357,19 +9167,6 @@ window["cr_setSuspended"] = function(s)
 		this.viewTop = py;
 		this.viewRight = px + (this.runtime.draw_width * (1 / myscale));
 		this.viewBottom = py + (this.runtime.draw_height * (1 / myscale));
-		var temp;
-		if (this.viewLeft > this.viewRight)
-		{
-			temp = this.viewLeft;
-			this.viewLeft = this.viewRight;
-			this.viewRight = temp;
-		}
-		if (this.viewTop > this.viewBottom)
-		{
-			temp = this.viewTop;
-			this.viewTop = this.viewBottom;
-			this.viewBottom = temp;
-		}
 		var myAngle = this.getAngle();
 		if (myAngle !== 0)
 		{
@@ -9652,22 +9449,9 @@ window["cr_setSuspended"] = function(s)
 				destEndX = screenright / windowWidth;
 				destEndY = 1 - screenbottom / windowHeight;
 			}
-			var pixelWidth;
-			var pixelHeight;
-			if (inst.curFrame && inst.curFrame.texture_img)
-			{
-				var img = inst.curFrame.texture_img;
-				pixelWidth = 1.0 / img.width;
-				pixelHeight = 1.0 / img.height;
-			}
-			else
-			{
-				pixelWidth = 1.0 / inst.width;
-				pixelHeight = 1.0 / inst.height;
-			}
 			glw.setProgramParameters(this.render_offscreen ? this.runtime.layer_tex : this.layout.getRenderTarget(), // backTex
-									 pixelWidth,
-									 pixelHeight,
+									 1.0 / inst.width,			// pixelWidth
+									 1.0 / inst.height,			// pixelHeight
 									 destStartX, destStartY,
 									 destEndX, destEndY,
 									 myscale,
@@ -10257,7 +10041,7 @@ window["cr_setSuspended"] = function(s)
 			this.is_else_block = (this.conditions[0].type == null && this.conditions[0].func == cr.system_object.prototype.cnds.Else);
 		}
 	};
-	window["_c2hh_"] = "DA39A3EE5E6B4B0D3255BFEF95601890AFD80709";
+	window["_c2hh_"] = "98B28819530545674DE8D47B4133F0C2ECEB7744";
 	EventBlock.prototype.postInit = function (hasElse/*, prevBlock_*/)
 	{
 		var i, len;
@@ -11041,7 +10825,7 @@ window["cr_setSuspended"] = function(s)
 				break;
 			case 10:	// instvar
 				this.index = m[1];
-				if (owner.type && owner.type.is_family)
+				if (owner.type.is_family)
 				{
 					this.get = this.get_familyvar;
 					this.variesPerInstance = true;
@@ -12697,10 +12481,6 @@ cr.system_object.prototype.loadFromJSON = function (o)
 	{
 		return true;
 	};
-	SysCnds.prototype.OnSaveFailed = function ()
-	{
-		return true;
-	};
 	SysCnds.prototype.OnLoadComplete = function ()
 	{
 		return true;
@@ -13447,68 +13227,6 @@ cr.system_object.prototype.loadFromJSON = function (o)
 			f = 120;
 		this.runtime.minimumFramerate = f;
 	};
-	function SortZOrderList(a, b)
-	{
-		var layerA = a[0];
-		var layerB = b[0];
-		var diff = layerA - layerB;
-		if (diff !== 0)
-			return diff;
-		var indexA = a[1];
-		var indexB = b[1];
-		return indexA - indexB;
-	};
-	function SortInstancesByValue(a, b)
-	{
-		return a[1] - b[1];
-	};
-	SysActs.prototype.SortZOrderByInstVar = function (obj, iv)
-	{
-		if (!obj)
-			return;
-		var i, len, inst, value, r, layer, toZ;
-		var sol = obj.getCurrentSol();
-		var pickedInstances = sol.getObjects();
-		var zOrderList = [];
-		var instValues = [];
-		var layout = this.runtime.running_layout;
-		var isFamily = obj.is_family;
-		var familyIndex = obj.family_index;
-		for (i = 0, len = pickedInstances.length; i < len; ++i)
-		{
-			inst = pickedInstances[i];
-			if (!inst.layer)
-				continue;		// not a world instance
-			if (isFamily)
-				value = inst.instance_vars[iv + inst.type.family_var_map[familyIndex]];
-			else
-				value = inst.instance_vars[iv];
-			zOrderList.push([
-				inst.layer.index,
-				inst.get_zindex()
-			]);
-			instValues.push([
-				inst,
-				value
-			]);
-		}
-		if (!zOrderList.length)
-			return;				// no instances were world instances
-		zOrderList.sort(SortZOrderList);
-		instValues.sort(SortInstancesByValue);
-		for (i = 0, len = zOrderList.length; i < len; ++i)
-		{
-			inst = instValues[i][0];					// instance in the order we want
-			layer = layout.layers[zOrderList[i][0]];	// layer to put it on
-			toZ = zOrderList[i][1];						// Z index on that layer to put it
-			if (layer.instances[toZ] !== inst)			// not already got this instance there
-			{
-				layer.instances[toZ] = inst;			// update instance
-				inst.layer = layer;						// update instance's layer reference (could have changed)
-				layer.setZIndicesStaleFrom(toZ);		// mark Z indices stale from this point since they have changed
-			}
-		}
-	};
 	sysProto.acts = new SysActs();
     function SysExps() {};
     SysExps.prototype["int"] = function(ret, x)
@@ -14064,14 +13782,14 @@ cr.system_object.prototype.loadFromJSON = function (o)
 	SysExps.prototype.regexmatchcount = function (ret, str_, regex_, flags_)
 	{
 		var regex = getRegex(regex_, flags_);
-		updateRegexMatches(str_.toString(), regex_, flags_);
+		updateRegexMatches(str_, regex_, flags_);
 		ret.set_int(regexMatches ? regexMatches.length : 0);
 	};
 	SysExps.prototype.regexmatchat = function (ret, str_, regex_, flags_, index_)
 	{
 		index_ = Math.floor(index_);
 		var regex = getRegex(regex_, flags_);
-		updateRegexMatches(str_.toString(), regex_, flags_);
+		updateRegexMatches(str_, regex_, flags_);
 		if (!regexMatches || index_ < 0 || index_ >= regexMatches.length)
 			ret.set_string("");
 		else
@@ -14957,8 +14675,6 @@ cr.system_object.prototype.loadFromJSON = function (o)
 			return false;
 		if (!this.bquad.contains_pt(x, y))
 			return false;
-		if (this.tilemap_exists)
-			return this.testPointOverlapTile(x, y);
 		if (this.collision_poly && !this.collision_poly.is_empty())
 		{
 			this.collision_poly.cache_poly(this.width, this.height, this.angle);
@@ -15087,13 +14803,14 @@ cr.system_object.prototype.loadFromJSON = function (o)
 		if (prevsol.select_all)
 		{
 			clonesol.select_all = true;
+			cr.clearArray(clonesol.else_instances);
 		}
 		else
 		{
 			clonesol.select_all = false;
 			cr.shallowAssignArray(clonesol.instances, prevsol.instances);
+			cr.shallowAssignArray(clonesol.else_instances, prevsol.else_instances);
 		}
-		cr.clearArray(clonesol.else_instances);
 	};
 	cr.type_popSol = function ()
 	{
@@ -15262,53 +14979,33 @@ cr.shaders["blurvertical"] = {src: ["varying mediump vec2 vTex;",
 	preservesOpaqueness: false,
 	animated: false,
 	parameters: [["intensity", 0, 1]] }
-cr.shaders["caustics"] = {src: ["precision mediump float;",
-"varying mediump vec2 vTex;",
+cr.shaders["brightness"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
-"uniform float seconds;",
-"uniform mediump float pixelWidth;",
-"uniform mediump float pixelHeight;",
-"float time = seconds;",
-"#define MAX_ITER 3",
-"void main( void )",
+"uniform lowp float brightness;",
+"void main(void)",
 "{",
-"vec4 front = texture2D(samplerFront, vTex);",
-"vec2 p =  vTex * 10.0 - vec2(20.0);",
-"vec2 i = p;",
-"float c = 1.0;",
-"float inten = .05;",
-"for (int n = 0; n < MAX_ITER; n++)",
-"{",
-"float t = time * (1.0 - (3.0 / float(n+1)));",
-"i = p + vec2(sin(t - i.x) + sin(t + i.y),",
-"cos(t - i.y) + sin(t + i.x));",
-"c += 1.0/length(vec2(p.x / (sin(i.x+t)/inten), //was cos",
-"p.y / (cos(i.y+t)/inten)));",
-"}",
-"c /= float(MAX_ITER);",
-"c = 1.5 - sqrt(c);",
-"vec4 effectColor = vec4(0.1, 0.2, 0.1, 1.); //Green",
-"effectColor.rgb *= (1.0 / (1.0 - (c + 0.05)));",
-"gl_FragColor = effectColor;",
+"lowp vec4 front = texture2D(samplerFront, vTex);",
+"front.rgb /= front.a;",
+"front.rgb += (brightness - 1.0);",
+"front.rgb *= front.a;",
+"gl_FragColor = front;",
 "}"
 ].join("\n"),
 	extendBoxHorizontal: 0,
 	extendBoxVertical: 0,
 	crossSampling: false,
-	preservesOpaqueness: false,
-	animated: true,
-	parameters: [] }
+	preservesOpaqueness: true,
+	animated: false,
+	parameters: [["brightness", 0, 1]] }
 cr.shaders["contrast"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
 "uniform lowp float contrast;",
 "void main(void)",
 "{",
 "lowp vec4 front = texture2D(samplerFront, vTex);",
-"lowp float a = front.a;",
-"if (a != 0.0)",
 "front.rgb /= front.a;",
 "front.rgb = (front.rgb - vec3(0.5)) * contrast + vec3(0.5);",
-"front.rgb *= a;",
+"front.rgb *= front.a;",
 "gl_FragColor = front;",
 "}"
 ].join("\n"),
@@ -15318,103 +15015,14 @@ cr.shaders["contrast"] = {src: ["varying mediump vec2 vTex;",
 	preservesOpaqueness: true,
 	animated: false,
 	parameters: [["contrast", 0, 1]] }
-cr.shaders["hsladjust"] = {src: ["varying mediump vec2 vTex;",
-"uniform lowp sampler2D samplerFront;",
-"precision mediump float;",
-"uniform float huerotate;",
-"uniform float satadjust;",
-"uniform float lumadjust;",
-"vec3 rgb_to_hsl(vec3 color)",
-"{",
-"vec3 hsl = vec3(0.0, 0.0, 0.0);",
-"float fmin = min(min(color.r, color.g), color.b);",
-"float fmax = max(max(color.r, color.g), color.b);",
-"float delta = fmax - fmin;",
-"hsl.z = (fmax + fmin) / 2.0;",
-"if (delta == 0.0)",
-"{",
-"hsl.x = 0.0;",
-"hsl.y = 0.0;",
-"}",
-"else",
-"{",
-"if (hsl.z < 0.5)",
-"hsl.y = delta / (fmax + fmin);",
-"else",
-"hsl.y = delta / (2.0 - fmax - fmin);",
-"float dR = (((fmax - color.r) / 6.0) + (delta / 2.0)) / delta;",
-"float dG = (((fmax - color.g) / 6.0) + (delta / 2.0)) / delta;",
-"float dB = (((fmax - color.b) / 6.0) + (delta / 2.0)) / delta;",
-"if (color.r == fmax)",
-"hsl.x = dB - dG;",
-"else if (color.g == fmax)",
-"hsl.x = (1.0 / 3.0) + dR - dB;",
-"else if (color.b == fmax)",
-"hsl.x = (2.0 / 3.0) + dG - dR;",
-"if (hsl.x < 0.0)",
-"hsl.x += 1.0;",
-"else if (hsl.x > 1.0)",
-"hsl.x -= 1.0;",
-"}",
-"return hsl;",
-"}",
-"float hue_to_rgb(float f1, float f2, float hue)",
-"{",
-"if (hue < 0.0)",
-"hue += 1.0;",
-"else if (hue > 1.0)",
-"hue -= 1.0;",
-"float ret;",
-"if ((6.0 * hue) < 1.0)",
-"ret = f1 + (f2 - f1) * 6.0 * hue;",
-"else if ((2.0 * hue) < 1.0)",
-"ret = f2;",
-"else if ((3.0 * hue) < 2.0)",
-"ret = f1 + (f2 - f1) * ((2.0 / 3.0) - hue) * 6.0;",
-"else",
-"ret = f1;",
-"return ret;",
-"}",
-"vec3 hsl_to_rgb(vec3 hsl)",
-"{",
-"vec3 rgb = vec3(hsl.z);",
-"if (hsl.y != 0.0)",
-"{",
-"float f2;",
-"if (hsl.z < 0.5)",
-"f2 = hsl.z * (1.0 + hsl.y);",
-"else",
-"f2 = (hsl.z + hsl.y) - (hsl.y * hsl.z);",
-"float f1 = 2.0 * hsl.z - f2;",
-"rgb.r = hue_to_rgb(f1, f2, hsl.x + (1.0 / 3.0));",
-"rgb.g = hue_to_rgb(f1, f2, hsl.x);",
-"rgb.b = hue_to_rgb(f1, f2, hsl.x - (1.0 / 3.0));",
-"}",
-"return rgb;",
-"}",
-"void main(void)",
-"{",
-"vec4 front = texture2D(samplerFront, vTex);",
-"vec3 rgb = rgb_to_hsl(front.rgb) + vec3(huerotate, 0, (lumadjust - 1.0) * front.a);",
-"rgb.y *= satadjust;",
-"rgb = hsl_to_rgb(rgb);",
-"gl_FragColor = vec4(rgb, front.a);",
-"}"
-].join("\n"),
-	extendBoxHorizontal: 0,
-	extendBoxVertical: 0,
-	crossSampling: false,
-	preservesOpaqueness: true,
-	animated: false,
-	parameters: [["huerotate", 0, 1], ["satadjust", 0, 1], ["lumadjust", 0, 1]] }
-cr.shaders["inverse"] = {src: ["varying mediump vec2 vTex;",
+cr.shaders["grayscale"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
 "uniform lowp float intensity;",
 "void main(void)",
 "{",
 "lowp vec4 front = texture2D(samplerFront, vTex);",
-"lowp vec3 inverse = vec3(front.a - front.rgb);",
-"gl_FragColor = vec4(mix(front.rgb, inverse, intensity), front.a);",
+"lowp float gray = front.r * 0.299 + front.g * 0.587 + front.b * 0.114;",
+"gl_FragColor = mix(front, vec4(gray, gray, gray, front.a), intensity);",
 "}"
 ].join("\n"),
 	extendBoxHorizontal: 0,
@@ -15423,40 +15031,6 @@ cr.shaders["inverse"] = {src: ["varying mediump vec2 vTex;",
 	preservesOpaqueness: true,
 	animated: false,
 	parameters: [["intensity", 0, 1]] }
-cr.shaders["outerglow2"] = {src: ["precision mediump float;",
-"varying vec2 vTex;",
-"uniform sampler2D samplerFront;",
-"uniform float pixelWidth;",
-"uniform float pixelHeight;",
-"const float blursamples = 4.0;",
-"const float directions = 16.0;",
-"const float Pi = 6.28318530718;",
-"float width = 1.0/pixelWidth;",
-"float height = 1.0/pixelHeight;",
-"uniform float intensity;",
-"void main()",
-"{",
-"vec4 front = texture2D(samplerFront, vTex);",
-"vec2 radius = (intensity/vec2(width,height));",
-"vec4 color = texture2D(samplerFront, vTex);",
-"for( float d=0.0;d<Pi;d+=Pi/directions)",
-"{",
-"for( float i=1.0/blursamples;i<=1.0;i+=1.0/blursamples)",
-"{",
-"color += texture2D( samplerFront, vTex + vec2(cos(d),sin(d))*radius*i);",
-"}",
-"}",
-"color /= blursamples * directions + 1.0;",
-"vec4 mixcolor=vec4(0.0,0.0,0.0,1.6);",
-"gl_FragColor = mix((mixcolor),max(front, color), 4.0)*(1.-front.a) + (front);",
-"}"
-].join("\n"),
-	extendBoxHorizontal: 0,
-	extendBoxVertical: 0,
-	crossSampling: false,
-	preservesOpaqueness: false,
-	animated: false,
-	parameters: [["intensity", 0, 0]] }
 cr.shaders["outline"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
 "precision highp float;",
@@ -15566,6 +15140,24 @@ cr.shaders["radialblur"] = {src: ["precision mediump float;",
 	preservesOpaqueness: false,
 	animated: false,
 	parameters: [["radius", 0, 1], ["intensity", 0, 1]] }
+cr.shaders["scanlines"] = {src: ["varying mediump vec2 vTex;",
+"uniform lowp sampler2D samplerFront;",
+"uniform mediump float pixelHeight;",
+"uniform mediump float lineHeight;",
+"void main(void)",
+"{",
+"lowp vec4 front = texture2D(samplerFront, vTex);",
+"mediump float factor = 1.0 + (floor(mod(vTex.y, pixelHeight * lineHeight * 2.0) / (pixelHeight * lineHeight)) / 3.0);",
+"front.rgb /= factor;",
+"gl_FragColor = front;",
+"}"
+].join("\n"),
+	extendBoxHorizontal: 0,
+	extendBoxVertical: 0,
+	crossSampling: false,
+	preservesOpaqueness: true,
+	animated: false,
+	parameters: [["lineHeight", 0, 0]] }
 cr.shaders["screen"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
 "uniform lowp sampler2D samplerBack;",
@@ -15585,17 +15177,21 @@ cr.shaders["screen"] = {src: ["varying mediump vec2 vTex;",
 	preservesOpaqueness: false,
 	animated: false,
 	parameters: [] }
-cr.shaders["sepia"] = {src: ["varying mediump vec2 vTex;",
+cr.shaders["sharpen"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
+"uniform mediump float pixelWidth;",
+"uniform mediump float pixelHeight;",
 "uniform lowp float intensity;",
 "void main(void)",
 "{",
-"lowp vec4 front = texture2D(samplerFront, vTex);",
-"lowp vec4 sepia = front * mat4( 0.3588, 0.7044, 0.1368, 0.0,",
-"0.2990, 0.5870, 0.1140, 0.0,",
-"0.2392, 0.4696, 0.0912, 0.0,",
-"0.0,\t0.0,\t0.0,\t1.0);",
-"gl_FragColor = mix(front, vec4(sepia.r, sepia.g, sepia.b, front.a), intensity);",
+"mediump float centerMultiplier = 1.0 + 4.0 * intensity;",
+"mediump vec4 front = texture2D(samplerFront, vTex);",
+"mediump vec3 textureColor = front.rgb;",
+"mediump vec3 leftTextureColor = texture2D(samplerFront, vTex - vec2(pixelWidth, 0.0)).rgb;",
+"mediump vec3 rightTextureColor = texture2D(samplerFront, vTex + vec2(pixelWidth, 0.0)).rgb;",
+"mediump vec3 topTextureColor = texture2D(samplerFront, vTex - vec2(0.0, pixelHeight)).rgb;",
+"mediump vec3 bottomTextureColor = texture2D(samplerFront, vTex + vec2(0.0, pixelHeight)).rgb;",
+"gl_FragColor = vec4((textureColor * centerMultiplier - (leftTextureColor * intensity + rightTextureColor * intensity + topTextureColor * intensity + bottomTextureColor * intensity)), front.a);",
 "}"
 ].join("\n"),
 	extendBoxHorizontal: 0,
@@ -15604,26 +15200,6 @@ cr.shaders["sepia"] = {src: ["varying mediump vec2 vTex;",
 	preservesOpaqueness: true,
 	animated: false,
 	parameters: [["intensity", 0, 1]] }
-cr.shaders["shift"] = {src: ["varying mediump vec2 vTex;",
-"uniform lowp sampler2D samplerFront;",
-"uniform lowp float pixelWidth;",
-"uniform lowp float pixelHeight;",
-"uniform mediump float xshift;",
-"uniform mediump float yshift;",
-"void main(void)",
-"{",
-"mediump vec2 tex = vTex;",
-"tex.x += (pixelWidth*-xshift);",
-"tex.y += (pixelHeight*-yshift);",
-"gl_FragColor = texture2D(samplerFront, tex);",
-"}"
-].join("\n"),
-	extendBoxHorizontal: 0,
-	extendBoxVertical: 0,
-	crossSampling: false,
-	preservesOpaqueness: false,
-	animated: false,
-	parameters: [["xshift", 0, 0], ["yshift", 0, 0]] }
 cr.shaders["tint"] = {src: ["varying mediump vec2 vTex;",
 "uniform lowp sampler2D samplerFront;",
 "uniform lowp float red;",
@@ -15641,326 +15217,152 @@ cr.shaders["tint"] = {src: ["varying mediump vec2 vTex;",
 	preservesOpaqueness: true,
 	animated: false,
 	parameters: [["red", 0, 1], ["green", 0, 1], ["blue", 0, 1]] }
-;
-;
-cr.plugins_.AJAX = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var isNWjs = false;
-	var path = null;
-	var fs = null;
-	var nw_appfolder = "";
-	var pluginProto = cr.plugins_.AJAX.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	typeProto.onCreate = function()
-	{
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-		this.lastData = "";
-		this.curTag = "";
-		this.progress = 0;
-		this.timeout = -1;
-		isNWjs = this.runtime.isNWjs;
-		if (isNWjs)
-		{
-			path = require("path");
-			fs = require("fs");
-			var process = window["process"] || nw["process"];
-			nw_appfolder = path["dirname"](process["execPath"]) + "\\";
-		}
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	var theInstance = null;
-	window["C2_AJAX_DCSide"] = function (event_, tag_, param_)
-	{
-		if (!theInstance)
-			return;
-		if (event_ === "success")
-		{
-			theInstance.curTag = tag_;
-			theInstance.lastData = param_;
-			theInstance.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyComplete, theInstance);
-			theInstance.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnComplete, theInstance);
-		}
-		else if (event_ === "error")
-		{
-			theInstance.curTag = tag_;
-			theInstance.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyError, theInstance);
-			theInstance.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnError, theInstance);
-		}
-		else if (event_ === "progress")
-		{
-			theInstance.progress = param_;
-			theInstance.curTag = tag_;
-			theInstance.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnProgress, theInstance);
-		}
-	};
-	instanceProto.onCreate = function()
-	{
-		theInstance = this;
-	};
-	instanceProto.saveToJSON = function ()
-	{
-		return { "lastData": this.lastData };
-	};
-	instanceProto.loadFromJSON = function (o)
-	{
-		this.lastData = o["lastData"];
-		this.curTag = "";
-		this.progress = 0;
-	};
-	var next_request_headers = {};
-	var next_override_mime = "";
-	instanceProto.doRequest = function (tag_, url_, method_, data_)
-	{
-		if (this.runtime.isDirectCanvas)
-		{
-			AppMobi["webview"]["execute"]('C2_AJAX_WebSide("' + tag_ + '", "' + url_ + '", "' + method_ + '", ' + (data_ ? '"' + data_ + '"' : "null") + ');');
-			return;
-		}
-		var self = this;
-		var request = null;
-		var doErrorFunc = function ()
-		{
-			self.curTag = tag_;
-			self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyError, self);
-			self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnError, self);
-		};
-		var errorFunc = function ()
-		{
-			if (isNWjs)
-			{
-				var filepath = nw_appfolder + url_;
-				if (fs["existsSync"](filepath))
-				{
-					fs["readFile"](filepath, {"encoding": "utf8"}, function (err, data) {
-						if (err)
-						{
-							doErrorFunc();
-							return;
-						}
-						self.curTag = tag_;
-						self.lastData = data.replace(/\r\n/g, "\n")
-						self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyComplete, self);
-						self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnComplete, self);
-					});
-				}
-				else
-					doErrorFunc();
-			}
-			else
-				doErrorFunc();
-		};
-		var progressFunc = function (e)
-		{
-			if (!e["lengthComputable"])
-				return;
-			self.progress = e.loaded / e.total;
-			self.curTag = tag_;
-			self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnProgress, self);
-		};
-		try
-		{
-			if (this.runtime.isWindowsPhone8)
-				request = new ActiveXObject("Microsoft.XMLHTTP");
-			else
-				request = new XMLHttpRequest();
-			request.onreadystatechange = function()
-			{
-				if (request.readyState === 4)
-				{
-					self.curTag = tag_;
-					if (request.responseText)
-						self.lastData = request.responseText.replace(/\r\n/g, "\n");		// fix windows style line endings
-					else
-						self.lastData = "";
-					if (request.status >= 400)
-					{
-						self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyError, self);
-						self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnError, self);
-					}
-					else
-					{
-						if ((!isNWjs || self.lastData.length) && !(!isNWjs && request.status === 0 && !self.lastData.length))
-						{
-							self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyComplete, self);
-							self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnComplete, self);
-						}
-					}
-				}
-			};
-			if (!this.runtime.isWindowsPhone8)
-			{
-				request.onerror = errorFunc;
-				request.ontimeout = errorFunc;
-				request.onabort = errorFunc;
-				request["onprogress"] = progressFunc;
-			}
-			request.open(method_, url_);
-			if (!this.runtime.isWindowsPhone8)
-			{
-				if (this.timeout >= 0 && typeof request["timeout"] !== "undefined")
-					request["timeout"] = this.timeout;
-			}
-			try {
-				request.responseType = "text";
-			} catch (e) {}
-			if (data_)
-			{
-				if (request["setRequestHeader"] && !next_request_headers.hasOwnProperty("Content-Type"))
-				{
-					request["setRequestHeader"]("Content-Type", "application/x-www-form-urlencoded");
-				}
-			}
-			if (request["setRequestHeader"])
-			{
-				var p;
-				for (p in next_request_headers)
-				{
-					if (next_request_headers.hasOwnProperty(p))
-					{
-						try {
-							request["setRequestHeader"](p, next_request_headers[p]);
-						}
-						catch (e) {}
-					}
-				}
-				next_request_headers = {};
-			}
-			if (next_override_mime && request["overrideMimeType"])
-			{
-				try {
-					request["overrideMimeType"](next_override_mime);
-				}
-				catch (e) {}
-				next_override_mime = "";
-			}
-			if (data_)
-				request.send(data_);
-			else
-				request.send();
-		}
-		catch (e)
-		{
-			errorFunc();
-		}
-	};
-	function Cnds() {};
-	Cnds.prototype.OnComplete = function (tag)
-	{
-		return cr.equals_nocase(tag, this.curTag);
-	};
-	Cnds.prototype.OnAnyComplete = function (tag)
-	{
-		return true;
-	};
-	Cnds.prototype.OnError = function (tag)
-	{
-		return cr.equals_nocase(tag, this.curTag);
-	};
-	Cnds.prototype.OnAnyError = function (tag)
-	{
-		return true;
-	};
-	Cnds.prototype.OnProgress = function (tag)
-	{
-		return cr.equals_nocase(tag, this.curTag);
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.Request = function (tag_, url_)
-	{
-		var self = this;
-		if (this.runtime.isWKWebView && !this.runtime.isAbsoluteUrl(url_))
-		{
-			this.runtime.fetchLocalFileViaCordovaAsText(url_,
-			function (str)
-			{
-				self.curTag = tag_;
-				self.lastData = str.replace(/\r\n/g, "\n");		// fix windows style line endings
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyComplete, self);
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnComplete, self);
-			},
-			function (err)
-			{
-				self.curTag = tag_;
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyError, self);
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnError, self);
-			});
-		}
-		else
-		{
-			this.doRequest(tag_, url_, "GET");
-		}
-	};
-	Acts.prototype.RequestFile = function (tag_, file_)
-	{
-		var self = this;
-		if (this.runtime.isWKWebView)
-		{
-			this.runtime.fetchLocalFileViaCordovaAsText(file_,
-			function (str)
-			{
-				self.curTag = tag_;
-				self.lastData = str.replace(/\r\n/g, "\n");		// fix windows style line endings
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyComplete, self);
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnComplete, self);
-			},
-			function (err)
-			{
-				self.curTag = tag_;
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnAnyError, self);
-				self.runtime.trigger(cr.plugins_.AJAX.prototype.cnds.OnError, self);
-			});
-		}
-		else
-		{
-			this.doRequest(tag_, file_, "GET");
-		}
-	};
-	Acts.prototype.Post = function (tag_, url_, data_, method_)
-	{
-		this.doRequest(tag_, url_, method_, data_);
-	};
-	Acts.prototype.SetTimeout = function (t)
-	{
-		this.timeout = t * 1000;
-	};
-	Acts.prototype.SetHeader = function (n, v)
-	{
-		next_request_headers[n] = v;
-	};
-	Acts.prototype.OverrideMIMEType = function (m)
-	{
-		next_override_mime = m;
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.LastData = function (ret)
-	{
-		ret.set_string(this.lastData);
-	};
-	Exps.prototype.Progress = function (ret)
-	{
-		ret.set_float(this.progress);
-	};
-	Exps.prototype.Tag = function (ret)
-	{
-		ret.set_string(this.curTag);
-	};
-	pluginProto.exps = new Exps();
-}());
+cr.shaders["warp"] = {src: ["varying mediump vec2 vTex;",
+"uniform lowp sampler2D samplerFront;",
+"uniform mediump float seconds;",
+"uniform mediump float pixelWidth;",
+"uniform mediump float pixelHeight;",
+"uniform mediump float layerScale;",
+"uniform mediump float freqX;",
+"uniform mediump float freqY;",
+"uniform mediump float ampX;",
+"uniform mediump float ampY;",
+"uniform mediump float speedX;",
+"uniform mediump float speedY;",
+"void main(void)",
+"{",
+"mediump float boxLeft = 0.0;",
+"mediump float boxTop = 0.0;",
+"mediump float aspect = pixelHeight / pixelWidth;",
+"mediump vec2 p = vTex;",
+"p.x += (cos((vTex.y - boxTop) * freqX / layerScale / (pixelWidth * 750.0) + (seconds * speedX)) * ampX * pixelWidth * layerScale);",
+"p.y += (sin((vTex.x - boxLeft) * freqY * aspect / layerScale / (pixelHeight * 750.0) + (seconds * speedY)) * ampY * pixelHeight * layerScale);",
+"gl_FragColor = texture2D(samplerFront, p);",
+"}"
+].join("\n"),
+	extendBoxHorizontal: 25,
+	extendBoxVertical: 25,
+	crossSampling: false,
+	preservesOpaqueness: false,
+	animated: true,
+	parameters: [["freqX", 0, 0], ["freqY", 0, 0], ["ampX", 0, 0], ["ampY", 0, 0], ["speedX", 0, 0], ["speedY", 0, 0]] }
+cr.shaders["water"] = {src: ["varying mediump vec2 vTex;",
+"uniform lowp sampler2D samplerFront;",
+"precision mediump float;",
+"uniform float seconds;",
+"uniform float pixelWidth;",
+"uniform float pixelHeight;",
+"const float PI = 3.1415926535897932;",
+"uniform float speed;",
+"uniform float speed_x;",
+"uniform float speed_y;",
+"uniform float intensity;",
+"const int steps = 8;",
+"uniform float frequency;",
+"uniform float angle; // better when a prime",
+"uniform float delta;",
+"uniform float intence;",
+"uniform float emboss;",
+"float col(vec2 coord)",
+"{",
+"float delta_theta = 2.0 * PI / angle;",
+"float col = 0.0;",
+"float theta = 0.0;",
+"for (int i = 0; i < steps; i++)",
+"{",
+"vec2 adjc = coord;",
+"theta = delta_theta*float(i);",
+"adjc.x += cos(theta)*seconds*speed + seconds * speed_x;",
+"adjc.y -= sin(theta)*seconds*speed - seconds * speed_y;",
+"col = col + cos( (adjc.x*cos(theta) - adjc.y*sin(theta))*frequency)*intensity;",
+"}",
+"return cos(col);",
+"}",
+"void main(void)",
+"{",
+"vec2 p = vTex, c1 = p, c2 = p;",
+"float cc1 = col(c1);",
+"c2.x += (1.0 / pixelWidth) / delta;",
+"float dx = emboss*(cc1-col(c2))/delta;",
+"c2.x = p.x;",
+"c2.y += (1.0 / pixelHeight) / delta;",
+"float dy = emboss*(cc1-col(c2))/delta;",
+"c1.x += dx;",
+"c1.y = -(c1.y+dy);",
+"float alpha = 1.+dot(dx,dy)*intence;",
+"c1.y = -c1.y;",
+"gl_FragColor = texture2D(samplerFront,c1)*(alpha);",
+"}"
+].join("\n"),
+	extendBoxHorizontal: 25,
+	extendBoxVertical: 25,
+	crossSampling: false,
+	preservesOpaqueness: false,
+	animated: true,
+	parameters: [["speed", 0, 1], ["speed_x", 0, 1], ["speed_y", 0, 1], ["intensity", 0, 0], ["frequency", 0, 0], ["angle", 0, 0], ["delta", 0, 0], ["intence", 0, 0], ["emboss", 0, 1]] }
+cr.shaders["waterbg"] = {src: ["varying mediump vec2 vTex;",
+"uniform lowp sampler2D samplerFront;",
+"uniform lowp sampler2D samplerBack;",
+"uniform mediump vec2 destStart;",
+"uniform mediump vec2 destEnd;",
+"precision mediump float;",
+"uniform float seconds;",
+"uniform float pixelWidth;",
+"uniform float pixelHeight;",
+"const float PI = 3.1415926535897932;",
+"uniform float speed;",
+"uniform float speed_x;",
+"uniform float speed_y;",
+"uniform float intensity;",
+"const int steps = 8;",
+"uniform float frequency;",
+"uniform float angle; // better when a prime",
+"uniform float delta;",
+"uniform float intence;",
+"uniform float emboss;",
+"float col(vec2 coord)",
+"{",
+"float delta_theta = 2.0 * PI / angle;",
+"float col = 0.0;",
+"float theta = 0.0;",
+"for (int i = 0; i < steps; i++)",
+"{",
+"vec2 adjc = coord;",
+"theta = delta_theta*float(i);",
+"adjc.x += cos(theta)*seconds*speed + seconds * speed_x;",
+"adjc.y -= sin(theta)*seconds*speed - seconds * speed_y;",
+"col = col + cos( (adjc.x*cos(theta) - adjc.y*sin(theta))*frequency)*intensity;",
+"}",
+"return cos(col);",
+"}",
+"void main(void)",
+"{",
+"vec2 p = vTex, c1 = p, c2 = p;",
+"float cc1 = col(c1);",
+"c2.x += (1.0 / pixelWidth) / delta;",
+"float dx = emboss*(cc1-col(c2))/delta;",
+"c2.x = p.x;",
+"c2.y += (1.0 / pixelHeight) / delta;",
+"float dy = emboss*(cc1-col(c2))/delta;",
+"c1.x += dx;",
+"c1.y = -(c1.y+dy);",
+"float alpha = 1.+dot(dx,dy)*intence;",
+"c1.y = -c1.y;",
+"lowp vec4 front = texture2D(samplerFront,c1) * alpha;",
+"lowp vec4 result;",
+"if (front.a == 0.0)",
+"result = front + texture2D(samplerBack, mix(destStart, destEnd, vTex)) * (1.0 - front.a);",
+"else",
+"result = front + texture2D(samplerBack, mix(destStart, destEnd, c1)) * (1.0 - front.a);",
+"gl_FragColor = result;",
+"}"
+].join("\n"),
+	extendBoxHorizontal: 25,
+	extendBoxVertical: 25,
+	crossSampling: true,
+	preservesOpaqueness: false,
+	animated: true,
+	parameters: [["speed", 0, 1], ["speed_x", 0, 1], ["speed_y", 0, 1], ["intensity", 0, 0], ["frequency", 0, 0], ["angle", 0, 0], ["delta", 0, 0], ["intence", 0, 0], ["emboss", 0, 1]] }
 ;
 ;
 cr.plugins_.Arr = function(runtime)
@@ -17456,14 +16858,25 @@ cr.plugins_.Audio = function(runtime)
 	AnalyserEffect.prototype.setParam = function(param, value, ramp, time)
 	{
 	};
+	var OT_POS_SAMPLES = 4;
 	function ObjectTracker()
 	{
 		this.obj = null;
 		this.loadUid = 0;
+		this.speeds = [];
+		this.lastX = 0;
+		this.lastY = 0;
+		this.moveAngle = 0;
 	};
 	ObjectTracker.prototype.setObject = function (obj_)
 	{
 		this.obj = obj_;
+		if (this.obj)
+		{
+			this.lastX = this.obj.x;
+			this.lastY = this.obj.y;
+		}
+		cr.clearArray(this.speeds);
 	};
 	ObjectTracker.prototype.hasObject = function ()
 	{
@@ -17471,6 +16884,38 @@ cr.plugins_.Audio = function(runtime)
 	};
 	ObjectTracker.prototype.tick = function (dt)
 	{
+		if (!this.obj || dt === 0)
+			return;
+		this.moveAngle = cr.angleTo(this.lastX, this.lastY, this.obj.x, this.obj.y);
+		var s = cr.distanceTo(this.lastX, this.lastY, this.obj.x, this.obj.y) / dt;
+		if (this.speeds.length < OT_POS_SAMPLES)
+			this.speeds.push(s);
+		else
+		{
+			this.speeds.shift();
+			this.speeds.push(s);
+		}
+		this.lastX = this.obj.x;
+		this.lastY = this.obj.y;
+	};
+	ObjectTracker.prototype.getSpeed = function ()
+	{
+		if (!this.speeds.length)
+			return 0;
+		var i, len, sum = 0;
+		for (i = 0, len = this.speeds.length; i < len; i++)
+		{
+			sum += this.speeds[i];
+		}
+		return sum / this.speeds.length;
+	};
+	ObjectTracker.prototype.getVelocityX = function ()
+	{
+		return Math.cos(this.moveAngle) * this.getSpeed();
+	};
+	ObjectTracker.prototype.getVelocityY = function ()
+	{
+		return Math.sin(this.moveAngle) * this.getSpeed();
 	};
 	var iOShadtouchstart = false;	// has had touch start input on iOS <=8 to work around web audio API muting
 	var iOShadtouchend = false;		// has had touch end input on iOS 9+ to work around web audio API muting
@@ -17509,7 +16954,7 @@ cr.plugins_.Audio = function(runtime)
 				this.supportWebAudioAPI = true;		// can be routed through web audio api
 				this.bufferObject.addEventListener("canplay", function ()
 				{
-					if (!self.mediaSourceNode && self.bufferObject)
+					if (!self.mediaSourceNode)		// protect against this event firing twice
 					{
 						self.mediaSourceNode = context["createMediaElementSource"](self.bufferObject);
 						self.mediaSourceNode["connect"](self.outNode);
@@ -17568,16 +17013,6 @@ cr.plugins_.Audio = function(runtime)
 				++j;		// keep
 		}
 		audioInstances.length = j;
-		if (this.mediaSourceNode)
-		{
-			this.mediaSourceNode["disconnect"]();
-			this.mediaSourceNode = null;
-		}
-		if (this.outNode)
-		{
-			this.outNode["disconnect"]();
-			this.outNode = null;
-		}
 		this.bufferObject = null;
 		this.audioData = null;
 	};
@@ -17933,6 +17368,9 @@ cr.plugins_.Audio = function(runtime)
 			a = inst.angle - inst.layer.getAngle();
 			this.pannerNode["setOrientation"](Math.cos(a), Math.sin(a), 0);
 		}
+		px = cr.rotatePtAround(this.objectTracker.getVelocityX(), this.objectTracker.getVelocityY(), -inst.layer.getAngle(), 0, 0, true);
+		py = cr.rotatePtAround(this.objectTracker.getVelocityX(), this.objectTracker.getVelocityY(), -inst.layer.getAngle(), 0, 0, false);
+		this.pannerNode["setVelocity"](px, py, 0);
 	};
 	C2AudioInstance.prototype.play = function (looping, vol, fromPosition, scheduledTime)
 	{
@@ -18505,8 +17943,6 @@ cr.plugins_.Audio = function(runtime)
 		var isAndroid = this.runtime.isAndroid;
 		var playDummyBuffer = function ()
 		{
-			if (context["state"] === "suspended" && context["resume"])
-				context["resume"]();
 			if (isContextSuspended || !context["createBuffer"])
 				return;
 			var buffer = context["createBuffer"](1, 220, 22050);
@@ -18542,17 +17978,6 @@ cr.plugins_.Audio = function(runtime)
 					iOShadtouchend = true;
 				}
 				playQueuedMusic();
-			}, true);
-		}
-		else if (playMusicAsSoundWorkaround)
-		{
-			document.addEventListener("touchend", function ()
-			{
-				if (!iOShadtouchend && context)
-				{
-					playDummyBuffer();
-					iOShadtouchend = true;
-				}
 			}, true);
 		}
 		if (api !== API_WEBAUDIO)
@@ -18627,6 +18052,8 @@ cr.plugins_.Audio = function(runtime)
 		var draw_height = (this.runtime.draw_height || this.runtime.height);
 		if (api === API_WEBAUDIO)
 		{
+			if (typeof context["listener"]["dopplerFactor"] !== "undefined")
+				context["listener"]["dopplerFactor"] = 0;
 			context["listener"]["setPosition"](draw_width / 2, draw_height / 2, this.listenerZ);
 			context["listener"]["setOrientation"](0, 0, 1, 0, -1, 0);
 			window["c2OnAudioMicStream"] = function (localMediaStream, tag)
@@ -18977,6 +18404,7 @@ cr.plugins_.Audio = function(runtime)
 			listenerX = this.listenerTracker.obj.x;
 			listenerY = this.listenerTracker.obj.y;
 			context["listener"]["setPosition"](this.listenerTracker.obj.x, this.listenerTracker.obj.y, this.listenerZ);
+			context["listener"]["setVelocity"](this.listenerTracker.getVelocityX(), this.listenerTracker.getVelocityY(), 0);
 		}
 	};
 	var preload_list = [];
@@ -19044,7 +18472,7 @@ cr.plugins_.Audio = function(runtime)
 		}
 		audioBuffers.length = j;
 	};
-	instanceProto.getAudioBuffer = function (src_, is_music, dont_create)
+	instanceProto.getAudioBuffer = function (src_, is_music)
 	{
 		var i, len, a, ret = null, j, k, lenj, ai;
 		for (i = 0, len = audioBuffers.length; i < len; i++)
@@ -19056,7 +18484,7 @@ cr.plugins_.Audio = function(runtime)
 				break;
 			}
 		}
-		if (!ret && !dont_create)
+		if (!ret)
 		{
 			if (playMusicAsSoundWorkaround && is_music)
 				this.releaseAllMusicBuffers();
@@ -19631,35 +19059,6 @@ cr.plugins_.Audio = function(runtime)
 			return;		// needs Web Audio API
 		this.nextPlayTime = t;
 	};
-	Acts.prototype.UnloadAudio = function (file)
-	{
-		var is_music = file[1];
-		var src = this.runtime.files_subfolder + file[0] + (useOgg ? ".ogg" : ".m4a");
-		var b = this.getAudioBuffer(src, is_music, true /* don't create if missing */);
-		if (!b)
-			return;		// not loaded
-		b.release();
-		cr.arrayFindRemove(audioBuffers, b);
-	};
-	Acts.prototype.UnloadAudioByName = function (folder, filename)
-	{
-		var is_music = (folder === 1);
-		var src = this.runtime.files_subfolder + filename.toLowerCase() + (useOgg ? ".ogg" : ".m4a");
-		var b = this.getAudioBuffer(src, is_music, true /* don't create if missing */);
-		if (!b)
-			return;		// not loaded
-		b.release();
-		cr.arrayFindRemove(audioBuffers, b);
-	};
-	Acts.prototype.UnloadAll = function ()
-	{
-		var i, len;
-		for (i = 0, len = audioBuffers.length; i < len; ++i)
-		{
-			audioBuffers[i].release();
-		};
-		cr.clearArray(audioBuffers);
-	};
 	pluginProto.acts = new Acts();
 	function Exps() {};
 	Exps.prototype.Duration = function (ret, tag)
@@ -19779,38 +19178,6 @@ cr.plugins_.Browser = function(runtime)
 	typeProto.onCreate = function()
 	{
 	};
-	var offlineScriptReady = false;
-	var browserPluginReady = false;
-	document.addEventListener("DOMContentLoaded", function ()
-	{
-		if (window["C2_RegisterSW"] && navigator.serviceWorker)
-		{
-			var offlineClientScript = document.createElement("script");
-			offlineClientScript.onload = function ()
-			{
-				offlineScriptReady = true;
-				checkReady()
-			};
-			offlineClientScript.src = "offlineClient.js";
-			document.head.appendChild(offlineClientScript);
-		}
-	});
-	var browserInstance = null;
-	typeProto.onAppBegin = function ()
-	{
-		browserPluginReady = true;
-		checkReady();
-	};
-	function checkReady()
-	{
-		if (offlineScriptReady && browserPluginReady && window["OfflineClientInfo"])
-		{
-			window["OfflineClientInfo"]["SetMessageCallback"](function (e)
-			{
-				browserInstance.onSWMessage(e);
-			});
-		}
-	};
 	pluginProto.Instance = function(type)
 	{
 		this.type = type;
@@ -19823,7 +19190,6 @@ cr.plugins_.Browser = function(runtime)
 		window.addEventListener("resize", function () {
 			self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnResize, self);
 		});
-		browserInstance = this;
 		if (typeof navigator.onLine !== "undefined")
 		{
 			window.addEventListener("online", function() {
@@ -19876,16 +19242,7 @@ cr.plugins_.Browser = function(runtime)
 				}
 			});
 		}
-		if (this.runtime.isWindows10 && typeof Windows !== "undefined")
-		{
-			Windows["UI"]["Core"]["SystemNavigationManager"]["getForCurrentView"]().addEventListener("backrequested", function (e)
-			{
-				var ret = self.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnBackButton, self);
-				if (ret)
-					e["handled"] = true;
-		    });
-		}
-		else if (this.runtime.isWinJS && WinJS["Application"])
+		if (this.runtime.isWinJS && WinJS["Application"])
 		{
 			WinJS["Application"]["onbackclick"] = function (e)
 			{
@@ -19903,16 +19260,6 @@ cr.plugins_.Browser = function(runtime)
 			}
 		});
 		this.is_arcade = (typeof window["is_scirra_arcade"] !== "undefined");
-	};
-	instanceProto.onSWMessage = function (e)
-	{
-		var messageType = e.data.type;
-		if (messageType === "downloading-update")
-			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateFound, this);
-		else if (messageType === "update-ready" || messageType === "update-pending")
-			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnUpdateReady, this);
-		else if (messageType === "offline-ready")
-			this.runtime.trigger(cr.plugins_.Browser.prototype.cnds.OnOfflineReady, this);
 	};
 	var batteryManager = null;
 	var loadedBatteryManager = false;
@@ -20033,18 +19380,6 @@ cr.plugins_.Browser = function(runtime)
 			return true;
 		var elem = this.runtime.canvasdiv || this.runtime.canvas;
 		return !!(elem["requestFullscreen"] || elem["mozRequestFullScreen"] || elem["msRequestFullscreen"] || elem["webkitRequestFullScreen"]);
-	};
-	Cnds.prototype.OnUpdateFound = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnUpdateReady = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnOfflineReady = function ()
-	{
-		return true;
 	};
 	pluginProto.cnds = new Cnds();
 	function Acts() {};
@@ -20184,7 +19519,7 @@ cr.plugins_.Browser = function(runtime)
 				return;
 			}
 			this.runtime.fullscreen_scaling = (stretchmode >= 2 ? stretchmode : 0);
-			var elem = document.documentElement;
+			var elem = this.runtime.canvasdiv || this.runtime.canvas;
 			if (firstRequestFullscreen)
 			{
 				firstRequestFullscreen = false;
@@ -20574,6 +19909,285 @@ cr.plugins_.Browser = function(runtime)
 	{
 		ret.set_int(window.outerHeight);
 	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
+cr.plugins_.Button = function(runtime)
+{
+	this.runtime = runtime;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.Button.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+		if (this.runtime.isDomFree)
+		{
+			cr.logexport("[Construct 2] Button plugin not supported on this platform - the object will not be created");
+			return;
+		}
+		this.isCheckbox = (this.properties[0] === 1);
+		this.inputElem = document.createElement("input");
+		if (this.isCheckbox)
+			this.elem = document.createElement("label");
+		else
+			this.elem = this.inputElem;
+		this.labelText = null;
+		this.inputElem.type = (this.isCheckbox ? "checkbox" : "button");
+		this.inputElem.id = this.properties[6];
+		jQuery(this.elem).appendTo(this.runtime.canvasdiv ? this.runtime.canvasdiv : "body");
+		if (this.isCheckbox)
+		{
+			jQuery(this.inputElem).appendTo(this.elem);
+			this.labelText = document.createTextNode(this.properties[1]);
+			jQuery(this.elem).append(this.labelText);
+			this.inputElem.checked = (this.properties[7] !== 0);
+			jQuery(this.elem).css("font-family", "sans-serif");
+			jQuery(this.elem).css("display", "inline-block");
+			jQuery(this.elem).css("color", "black");
+		}
+		else
+			this.inputElem.value = this.properties[1];
+		this.elem.title = this.properties[2];
+		this.inputElem.disabled = (this.properties[4] === 0);
+		this.autoFontSize = (this.properties[5] !== 0);
+		this.element_hidden = false;
+		if (this.properties[3] === 0)
+		{
+			jQuery(this.elem).hide();
+			this.visible = false;
+			this.element_hidden = true;
+		}
+		this.inputElem.onclick = (function (self) {
+			return function(e) {
+				e.stopPropagation();
+				self.runtime.isInUserInputEvent = true;
+				self.runtime.trigger(cr.plugins_.Button.prototype.cnds.OnClicked, self);
+				self.runtime.isInUserInputEvent = false;
+			};
+		})(this);
+		this.elem.addEventListener("touchstart", function (e) {
+			e.stopPropagation();
+		}, false);
+		this.elem.addEventListener("touchmove", function (e) {
+			e.stopPropagation();
+		}, false);
+		this.elem.addEventListener("touchend", function (e) {
+			e.stopPropagation();
+		}, false);
+		jQuery(this.elem).mousedown(function (e) {
+			e.stopPropagation();
+		});
+		jQuery(this.elem).mouseup(function (e) {
+			e.stopPropagation();
+		});
+		jQuery(this.elem).keydown(function (e) {
+			e.stopPropagation();
+		});
+		jQuery(this.elem).keyup(function (e) {
+			e.stopPropagation();
+		});
+		this.lastLeft = 0;
+		this.lastTop = 0;
+		this.lastRight = 0;
+		this.lastBottom = 0;
+		this.lastWinWidth = 0;
+		this.lastWinHeight = 0;
+		this.updatePosition(true);
+		this.runtime.tickMe(this);
+	};
+	instanceProto.saveToJSON = function ()
+	{
+		var o = {
+			"tooltip": this.elem.title,
+			"disabled": !!this.inputElem.disabled
+		};
+		if (this.isCheckbox)
+		{
+			o["checked"] = !!this.inputElem.checked;
+			o["text"] = this.labelText.nodeValue;
+		}
+		else
+		{
+			o["text"] = this.elem.value;
+		}
+		return o;
+	};
+	instanceProto.loadFromJSON = function (o)
+	{
+		this.elem.title = o["tooltip"];
+		this.inputElem.disabled = o["disabled"];
+		if (this.isCheckbox)
+		{
+			this.inputElem.checked = o["checked"];
+			this.labelText.nodeValue = o["text"];
+		}
+		else
+		{
+			this.elem.value = o["text"];
+		}
+	};
+	instanceProto.onDestroy = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		jQuery(this.elem).remove();
+		this.elem = null;
+	};
+	instanceProto.tick = function ()
+	{
+		this.updatePosition();
+	};
+	var last_canvas_offset = null;
+	var last_checked_tick = -1;
+	instanceProto.updatePosition = function (first)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		var left = this.layer.layerToCanvas(this.x, this.y, true);
+		var top = this.layer.layerToCanvas(this.x, this.y, false);
+		var right = this.layer.layerToCanvas(this.x + this.width, this.y + this.height, true);
+		var bottom = this.layer.layerToCanvas(this.x + this.width, this.y + this.height, false);
+		var rightEdge = this.runtime.width / this.runtime.devicePixelRatio;
+		var bottomEdge = this.runtime.height / this.runtime.devicePixelRatio;
+		if (!this.visible || !this.layer.visible || right <= 0 || bottom <= 0 || left >= rightEdge || top >= bottomEdge)
+		{
+			if (!this.element_hidden)
+				jQuery(this.elem).hide();
+			this.element_hidden = true;
+			return;
+		}
+		if (left < 1)
+			left = 1;
+		if (top < 1)
+			top = 1;
+		if (right >= rightEdge)
+			right = rightEdge - 1;
+		if (bottom >= bottomEdge)
+			bottom = bottomEdge - 1;
+		var curWinWidth = window.innerWidth;
+		var curWinHeight = window.innerHeight;
+		if (!first && this.lastLeft === left && this.lastTop === top && this.lastRight === right && this.lastBottom === bottom && this.lastWinWidth === curWinWidth && this.lastWinHeight === curWinHeight)
+		{
+			if (this.element_hidden)
+			{
+				jQuery(this.elem).show();
+				this.element_hidden = false;
+			}
+			return;
+		}
+		this.lastLeft = left;
+		this.lastTop = top;
+		this.lastRight = right;
+		this.lastBottom = bottom;
+		this.lastWinWidth = curWinWidth;
+		this.lastWinHeight = curWinHeight;
+		if (this.element_hidden)
+		{
+			jQuery(this.elem).show();
+			this.element_hidden = false;
+		}
+		var offx = Math.round(left) + jQuery(this.runtime.canvas).offset().left;
+		var offy = Math.round(top) + jQuery(this.runtime.canvas).offset().top;
+		jQuery(this.elem).css("position", "absolute");
+		jQuery(this.elem).offset({left: offx, top: offy});
+		jQuery(this.elem).width(Math.round(right - left));
+		jQuery(this.elem).height(Math.round(bottom - top));
+		if (this.autoFontSize)
+			jQuery(this.elem).css("font-size", ((this.layer.getScale(true) / this.runtime.devicePixelRatio) - 0.2) + "em");
+	};
+	instanceProto.draw = function(ctx)
+	{
+	};
+	instanceProto.drawGL = function(glw)
+	{
+	};
+	function Cnds() {};
+	Cnds.prototype.OnClicked = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.IsChecked = function ()
+	{
+		return this.isCheckbox && this.inputElem.checked;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetText = function (text)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		if (this.isCheckbox)
+			this.labelText.nodeValue = text;
+		else
+			this.elem.value = text;
+	};
+	Acts.prototype.SetTooltip = function (text)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.title = text;
+	};
+	Acts.prototype.SetVisible = function (vis)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.visible = (vis !== 0);
+	};
+	Acts.prototype.SetEnabled = function (en)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.inputElem.disabled = (en === 0);
+	};
+	Acts.prototype.SetFocus = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.inputElem.focus();
+	};
+	Acts.prototype.SetBlur = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.inputElem.blur();
+	};
+	Acts.prototype.SetCSSStyle = function (p, v)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		jQuery(this.elem).css(p, v);
+	};
+	Acts.prototype.SetChecked = function (c)
+	{
+		if (this.runtime.isDomFree || !this.isCheckbox)
+			return;
+		this.inputElem.checked = (c === 1);
+	};
+	Acts.prototype.ToggleChecked = function ()
+	{
+		if (this.runtime.isDomFree || !this.isCheckbox)
+			return;
+		this.inputElem.checked = !this.inputElem.checked;
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
 	pluginProto.exps = new Exps();
 }());
 ;
@@ -21989,18 +21603,6 @@ cr.plugins_.Mouse = function(runtime)
 		if (this.handled && cr.isCanvasInputEvent(info))
 			info.preventDefault();
 	};
-	instanceProto.onWindowBlur = function ()
-	{
-		var i, len;
-		for (i = 0, len = this.buttonMap.length; i < len; ++i)
-		{
-			if (!this.buttonMap[i])
-				continue;
-			this.buttonMap[i] = false;
-			this.triggerButton = i - 1;
-			this.runtime.trigger(cr.plugins_.Mouse.prototype.cnds.OnRelease, this);
-		}
-	};
 	function Cnds() {};
 	Cnds.prototype.OnClick = function (button, type)
 	{
@@ -22152,7 +21754,6 @@ cr.plugins_.NodeWebkit = function(runtime)
 	var isNWjs = false;
 	var path = null;
 	var fs = null;
-	var os = null;
 	var gui = null;
 	var child_process = null;
 	var process = null;
@@ -22186,13 +21787,12 @@ cr.plugins_.NodeWebkit = function(runtime)
 		{
 			path = require("path");
 			fs = require("fs");
-			os = require("os");
 			child_process = require("child_process");
 			process = window["process"] || nw["process"];
 			if (process["platform"] !== "win32")
 				slash = "/";
 			nw_appfolder = path["dirname"](process["execPath"]) + slash;
-			nw_userfolder = os["homedir"]() + slash;
+			nw_userfolder = (process["env"]["HOME"] || process["env"]["HOMEPATH"] || process["env"]["USERPROFILE"]) + slash;
 			gui = window["nwgui"];
 			window["ondrop"] = function (e)
 			{
@@ -22204,42 +21804,30 @@ cr.plugins_.NodeWebkit = function(runtime)
 				}
 				return false;
 			};
-			var openFileDialogElem = document.getElementById("c2nwOpenFileDialog");
-			openFileDialogElem["onchange"] = function (e) {
-				chosenpath = openFileDialogElem.value;
+			jQuery("#c2nwOpenFileDialog").change(function (e) {
+				chosenpath = jQuery(this).val();
 				self.runtime.trigger(cr.plugins_.NodeWebkit.prototype.cnds.OnOpenDlg, self);
 				try {
-					openFileDialogElem.value = null;
+					document.getElementById("c2nwOpenFileDialog").value = null;
 				}
 				catch (e) {}
-			};
-			openFileDialogElem["oncancel"] = function () {
-				self.runtime.trigger(cr.plugins_.NodeWebkit.prototype.cnds.OnOpenDlgCancel, self);
-			};
-			var chooseFolderDialogElem = document.getElementById("c2nwChooseFolderDialog");
-			chooseFolderDialogElem["onchange"] = function (e) {
-				chosenpath = chooseFolderDialogElem.value;
+			});
+			jQuery("#c2nwChooseFolderDialog").change(function (e) {
+				chosenpath = jQuery(this).val();
 				self.runtime.trigger(cr.plugins_.NodeWebkit.prototype.cnds.OnFolderDlg, self);
 				try {
-					chooseFolderDialogElem.value = null;
+					document.getElementById("c2nwChooseFolderDialog").value = null;
 				}
 				catch (e) {}
-			};
-			chooseFolderDialogElem["oncancel"] = function () {
-				self.runtime.trigger(cr.plugins_.NodeWebkit.prototype.cnds.OnFolderDlgCancel, self);
-			};
-			var saveDialogElem = document.getElementById("c2nwSaveDialog");
-			saveDialogElem["onchange"] = function (e) {
-				chosenpath = saveDialogElem.value;
+			});
+			jQuery("#c2nwSaveDialog").change(function (e) {
+				chosenpath = jQuery(this).val();
 				self.runtime.trigger(cr.plugins_.NodeWebkit.prototype.cnds.OnSaveDlg, self);
 				try {
-					saveDialogElem.value = null;
+					document.getElementById("c2nwSaveDialog").value = null;
 				}
 				catch (e) {}
-			};
-			saveDialogElem["oncancel"] = function () {
-				self.runtime.trigger(cr.plugins_.NodeWebkit.prototype.cnds.OnSaveDlgCancel, self);
-			};
+			});
 		}
 	};
 	instanceProto.onDestroy = function ()
@@ -22274,18 +21862,6 @@ cr.plugins_.NodeWebkit = function(runtime)
 		return true;
 	};
 	Cnds.prototype.OnSaveDlg = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnOpenDlgCancel = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnFolderDlgCancel = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnSaveDlgCancel = function ()
 	{
 		return true;
 	};
@@ -22452,7 +22028,6 @@ cr.plugins_.NodeWebkit = function(runtime)
 		if (!isNWjs || !gui)
 			return;
 		gui["Window"]["get"]()["title"] = str;
-		document.title = str;
 	};
 	Acts.prototype.WindowMinimize = function ()
 	{
@@ -22543,10 +22118,6 @@ cr.plugins_.NodeWebkit = function(runtime)
 	Exps.prototype.AppFolder = function (ret)
 	{
 		ret.set_string(nw_appfolder);
-	};
-	Exps.prototype.AppFolderURL = function (ret)
-	{
-		ret.set_string("file://" + nw_appfolder);
 	};
 	Exps.prototype.UserFolder = function (ret)
 	{
@@ -23403,6 +22974,11 @@ cr.plugins_.Sprite = function(runtime)
 		this.isTicking = false;
 		this.inAnimTrigger = false;
 		this.collisionsEnabled = (this.properties[3] !== 0);
+		if (!(this.type.animations.length === 1 && this.type.animations[0].frames.length === 1) && this.type.animations[0].speed !== 0)
+		{
+			this.runtime.tickMe(this);
+			this.isTicking = true;
+		}
 		this.cur_animation = this.getAnimationByName(this.properties[1]) || this.type.animations[0];
 		this.cur_frame = this.properties[2];
 		if (this.cur_frame < 0)
@@ -23415,11 +22991,6 @@ cr.plugins_.Sprite = function(runtime)
 		this.hotspotY = curanimframe.hotspotY;
 		this.cur_anim_speed = this.cur_animation.speed;
 		this.cur_anim_repeatto = this.cur_animation.repeatto;
-		if (!(this.type.animations.length === 1 && this.type.animations[0].frames.length === 1) && this.cur_anim_speed !== 0)
-		{
-			this.runtime.tickMe(this);
-			this.isTicking = true;
-		}
 		if (this.recycled)
 			this.animTimer.reset();
 		else
@@ -24351,7 +23922,7 @@ cr.plugins_.Sprite = function(runtime)
 			this.set_bbox_changed();
 		}
 	};
-	Acts.prototype.LoadURL = function (url_, resize_, crossOrigin_)
+	Acts.prototype.LoadURL = function (url_, resize_)
 	{
 		var img = new Image();
 		var self = this;
@@ -24398,9 +23969,9 @@ cr.plugins_.Sprite = function(runtime)
 			self.runtime.redraw = true;
 			self.runtime.trigger(cr.plugins_.Sprite.prototype.cnds.OnURLLoaded, self);
 		};
-		if (url_.substr(0, 5) !== "data:" && crossOrigin_ === 0)
+		if (url_.substr(0, 5) !== "data:")
 			img["crossOrigin"] = "anonymous";
-		this.runtime.setImageSrc(img, url_);
+		img.src = url_;
 	};
 	Acts.prototype.SetCollisions = function (set_)
 	{
@@ -24908,7 +24479,6 @@ cr.plugins_.Spritefont2 = function(runtime)
 			ctx.save();
 			ctx.translate(myx, myy);
 			ctx.rotate(this.angle);
-			var angle      = this.angle;
 			var ha         = this.halign;
 			var va         = this.valign;
 			var scale      = this.characterScale;
@@ -24932,7 +24502,7 @@ cr.plugins_.Spritefont2 = function(runtime)
 				halign = ha * cr.max(0,this.width - len);
 				drawX = offx + halign;
 				drawY += lineHeight;
-				if (angle === 0 && myy + drawY + charHeight < viewTop)
+				if (myy + drawY + charHeight < viewTop)
 				{
 					drawY += charHeight;
 					continue;
@@ -24941,7 +24511,7 @@ cr.plugins_.Spritefont2 = function(runtime)
 					var letter = line.charAt(j);
 					letterWidth = this.getCharacterWidth(letter);
 					var clip = this.clipList[letter];
-					if (angle === 0 && myx + drawX + letterWidth * scale + charSpace < viewLeft)
+					if (myx + drawX + letterWidth * scale + charSpace < viewLeft)
 					{
 						drawX += letterWidth * scale + charSpace;
 						continue;
@@ -24952,7 +24522,7 @@ cr.plugins_.Spritefont2 = function(runtime)
 					if (clip !== undefined) {
 						roundX = drawX;
 						roundY = drawY;
-						if (angle === 0 && scale === 1)
+						if (this.angle === 0)
 						{
 							roundX = Math.round(roundX);
 							roundY = Math.round(roundY);
@@ -24962,11 +24532,11 @@ cr.plugins_.Spritefont2 = function(runtime)
 									 roundX,roundY,clip.w*scale,clip.h*scale);
 					}
 					drawX += letterWidth * scale + charSpace;
-					if (angle === 0 && myx + drawX > viewRight)
+					if (myx + drawX > viewRight)
 						break;
 				}
 				drawY += charHeight;
-				if (angle === 0 && (drawY + charHeight + lineHeight > this.height || myy + drawY > viewBottom))
+				if (drawY + charHeight + lineHeight > this.height || myy + drawY > viewBottom)
 				{
 					break;
 				}
@@ -25051,7 +24621,7 @@ cr.plugins_.Spritefont2 = function(runtime)
 				var letter = line.charAt(j);
 				letterWidth = this.getCharacterWidth(letter);
 				var clipUV = this.clipUV[letter];
-				if (angle === 0 && offx + drawX + letterWidth * scale + charSpace < viewLeft)
+				if (offx + drawX + letterWidth * scale + charSpace < viewLeft)
 				{
 					drawX += letterWidth * scale + charSpace;
 					continue;
@@ -25065,7 +24635,7 @@ cr.plugins_.Spritefont2 = function(runtime)
 					var clipHeight = this.characterHeight*scale;
 					roundX = drawX;
 					roundY = drawY;
-					if (angle === 0 && scale === 1)
+					if (angle === 0)
 					{
 						roundX = Math.round(roundX);
 						roundY = Math.round(roundY);
@@ -25096,7 +24666,7 @@ cr.plugins_.Spritefont2 = function(runtime)
 					break;
 			}
 			drawY += charHeight;
-			if (angle === 0 && (drawY + charHeight + lineHeight > this.height || offy + drawY > viewBottom))
+			if (drawY + charHeight + lineHeight > this.height || offy + drawY > viewBottom)
 			{
 				break;
 			}
@@ -25230,5654 +24800,6 @@ cr.plugins_.Spritefont2 = function(runtime)
 	{
 		this.rebuildText();
 		ret.set_float(this.textHeight);
-	};
-	pluginProto.exps = new Exps();
-}());
-;
-;
-cr.plugins_.Spriter = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var pluginProto = cr.plugins_.Spriter.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	function frame_getDataUri()
-	{
-		if (this.datauri.length === 0)
-		{
-			var tmpcanvas = document.createElement("canvas");
-			tmpcanvas.width = this.width;
-			tmpcanvas.height = this.height;
-			var tmpctx = tmpcanvas.getContext("2d");
-			if (this.spritesheeted)
-			{
-				tmpctx.drawImage(this.texture_img, this.offx, this.offy, this.width, this.height,
-										 0, 0, this.width, this.height);
-			}
-			else
-			{
-				tmpctx.drawImage(this.texture_img, 0, 0, this.width, this.height);
-			}
-			this.datauri = tmpcanvas.toDataURL("image/png");
-		}
-		return this.datauri;
-	};
-	typeProto.onCreate = function()
-	{
-		this.scmlFiles={};
-		this.scmlReserved={};
-		this.scmlInstsToNotify={};
-		this.objectArrays=[];
-		this.boneWidthArrays=[];
-		if (this.is_family)
-			return;
-		var i, leni, j, lenj;
-		var anim, frame, animobj, frameobj, wt, uv;
-		this.all_frames = [];
-		this.has_loaded_textures = false;
-		if(this.animations)
-		{
-			for (i = 0, leni = this.animations.length; i < leni; i++)
-			{
-				anim = this.animations[i];
-				animobj = {};
-				animobj.name = anim[0];
-				animobj.speed = anim[1];
-				animobj.loop = anim[2];
-				animobj.repeatcount = anim[3];
-				animobj.repeatto = anim[4];
-				animobj.pingpong = anim[5];
-				animobj.sid = anim[6];
-				animobj.frames = [];
-				for (j = 0, lenj = anim[7].length; j < lenj; j++)
-				{
-					frame = anim[7][j];
-					frameobj = {};
-					frameobj.texture_file = frame[0];
-					frameobj.texture_filesize = frame[1];
-					frameobj.offx = frame[2];
-					frameobj.offy = frame[3];
-					frameobj.width = frame[4];
-					frameobj.height = frame[5];
-					frameobj.duration = frame[6];
-					frameobj.hotspotX = frame[7];
-					frameobj.hotspotY = frame[8];
-					frameobj.image_points = frame[9];
-					frameobj.poly_pts = frame[10];
-					frameobj.pixelformat = frame[11];
-					frameobj.spritesheeted = (frameobj.width !== 0);
-					frameobj.datauri = "";		// generated on demand and cached
-					frameobj.getDataUri = frame_getDataUri;
-					uv = {};
-					uv.left = 0;
-					uv.top = 0;
-					uv.right = 1;
-					uv.bottom = 1;
-					frameobj.sheetTex = uv;
-					frameobj.webGL_texture = null;
-					wt = this.runtime.findWaitingTexture(frame[0]);
-					if (wt)
-					{
-						frameobj.texture_img = wt;
-					}
-					else
-					{
-						frameobj.texture_img = new Image();
-						frameobj.texture_img.cr_src = frame[0];
-						frameobj.texture_img.cr_filesize = frame[1];
-						frameobj.texture_img.c2webGL_texture = null;
-						this.runtime.waitForImageLoad(frameobj.texture_img, frame[0]);
-					}
-					cr.seal(frameobj);
-					animobj.frames.push(frameobj);
-					this.all_frames.push(frameobj);
-				}
-				cr.seal(animobj);
-				this.animations[i] = animobj;		// swap array data for object
-			}
-		}
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-		this.lastData = "";
-		this.progress = 0;
-		this.entity = 0;
-		this.entities = [];
-		this.currentSpriterTime = 0;
-		this.currentAdjustedTime = 0;
-		this.secondTime = 0;
-		this.start_time = cr.performance_now();
-		this.lastKnownTime = this.getNowTime();
-		this.drawSelf=false;
-		this.ignoreGlobalTimeScale=false;
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	instanceProto.setEntitiesToOtherEntities = function(otherEntities)
-	{
-		var NO_INDEX=-1;
-		var entityTags = otherEntities;
-		var att=0;
-		for (var e = 0; e < entityTags.length; e++)
-		{
-			var entityTag=entityTags[e];
-			att=entityTag;
-			var entity = new SpriterEntity();
-			att=entityTag;
-			entity.name=att.name;
-			var animationTags = entityTag.animations;
-			for (var a = 0; a < animationTags.length; a++)
-			{
-				var animationTag = animationTags[a];
-				att=animationTag;
-				var animation = new SpriterAnimation();
-				animation.name = att.name;
-				animation.length = att.length;
-				animation.looping = att.looping;
-				animation.loopTo = att.loopTo;
-				animation.l = att.l;
-				animation.t = att.t;
-				animation.r = att.r;
-				animation.b = att.b;
-				animation.meta=att.meta;
-				var mainlineTag = animationTag.mainlineKeys;
-				var mainline = new SpriterTimeline();
-				var keyTags = mainlineTag;
-				for (var k = 0; k<keyTags.length; k++)
-				{
-					var keyTag = keyTags[k];
-					var key = new SpriterKey();
-					att=keyTag;
-					key.time = att.time;
-					key.curveType=att.curveType;
-					key.c1=att.c1;
-					key.c2=att.c2;
-					key.c3=att.c3;
-					key.c4=att.c4;
-					var boneRefTags = keyTag.bones;
-					if(boneRefTags)
-					{
-						for (var o = 0; o < boneRefTags.length; o++)
-						{
-							var boneRefTag=boneRefTags[o];
-							att=boneRefTag;
-							var boneRef = new SpriterObjectRef();
-							boneRef.timeline=att.timeline;
-							boneRef.key=att.key;
-							boneRef.parent = att.parent;
-							key.bones.push(boneRef);
-						}
-					}
-					var objectRefTags = keyTag.objects;
-					if(objectRefTags)
-					{
-						for (var o = 0; o < objectRefTags.length; o++)
-						{
-							var objectRefTag=objectRefTags[o];
-							att=objectRefTag;
-							var objectRef = new SpriterObjectRef();
-							objectRef.timeline=att.timeline;
-							objectRef.key=att.key;
-							objectRef.parent = att.parent;
-							key.objects.push(objectRef);
-						}
-					}
-					animation.mainlineKeys.push(key);
-				}
-				animation.mainline=mainline;
-				var timelineTags = animationTag.timelines;
-				if(timelineTags)
-				{
-					for (var t = 0; t < timelineTags.length; t++)
-					{
-						var timelineTag=timelineTags[t];
-						var timeline = new SpriterTimeline();
-						timeline.objectType = timelineTag.objectType;
-						var timelineName=timelineTag.name;
-						timeline.name=timelineName;
-						timeline.meta=timelineTag.meta;
-						var keyTags = timelineTag.keys;
-						if(keyTags)
-						{
-							for (var k = 0; k<keyTags.length; k++)
-							{
-								var keyTag = keyTags[k];
-								var key = new SpriterKey();
-								key.time = keyTag.time;
-								key.spin = keyTag.spin;
-								key.curveType=keyTag.curveType;
-								key.c1=keyTag.c1;
-								key.c2=keyTag.c2;
-								key.c3=keyTag.c3;
-								key.c4=keyTag.c4;
-								var objectTags = keyTag.objects;
-								if(objectTags)
-								{
-									for(var o=0; o<objectTags.length; o++)
-									{
-										var objectTag=objectTags[o];
-										var object=CloneObject(objectTag);
-										key.objects.push(object);
-									}
-								}
-								var boneTags = keyTag.bones;
-								if(boneTags)
-								{
-									for(var o=0; o<boneTags.length; o++)
-									{
-										var boneTag=boneTags[o];
-										var bone=CloneObject(boneTag);
-										key.bones.push(bone);
-									}
-								}
-								timeline.keys.push(key);
-							}
-						}
-						timeline.c2Object=this.c2ObjectArray[findObjectItemInArray(timelineName,this.objectArray,entity.name)];
-						timeline.object=timelineTag.object;
-						animation.timelines.push(timeline);
-					}
-				}
-				timelineTags = animationTag.soundlines;
-				if(timelineTags)
-				{
-					for (var t = 0; t < timelineTags.length; t++)
-					{
-						var timelineTag=timelineTags[t];
-						var timeline = new SpriterTimeline();
-						timeline.objectType = timelineTag.objectType;
-						var timelineName=timelineTag.name;
-						timeline.name=timelineName;
-						timeline.meta=timelineTag.meta;
-						var keyTags = timelineTag.keys;
-						if(keyTags)
-						{
-							for (var k = 0; k<keyTags.length; k++)
-							{
-								var keyTag = keyTags[k];
-								var key = new SpriterKey();
-								timelineTag=keyTag;
-								key.time = timelineTag.time;
-								key.curveType=timelineTag.curveType;
-								key.c1=timelineTag.c1;
-								key.c2=timelineTag.c2;
-								key.c3=timelineTag.c3;
-								key.c4=timelineTag.c4;
-								var objectTags = keyTag.objects;
-								if(objectTags)
-								{
-									for(var o=0; o<objectTags.length; o++)
-									{
-										var objectTag=objectTags[o];
-										var object=this.cloneSound(objectTag);
-										key.objects.push(object);
-									}
-								}
-								timeline.keys.push(key);
-							}
-						}
-						animation.soundlines.push(timeline);
-					}
-				}
-				timelineTags = animationTag.eventlines;
-				if(timelineTags)
-				{
-					for (var t = 0; t < timelineTags.length; t++)
-					{
-						var timelineTag=timelineTags[t];
-						var timeline = new SpriterTimeline();
-						timeline.objectType = timelineTag.objectType;
-						var timelineName=timelineTag.name;
-						timeline.name=timelineName;
-						timeline.meta=timelineTag.meta;
-						var keyTags = timelineTag.keys;
-						if(keyTags)
-						{
-							for (var k = 0; k<keyTags.length; k++)
-							{
-								var keyTag = keyTags[k];
-								var key = new SpriterKey();
-								timelineTag=keyTag;
-								key.time = timelineTag.time;
-								timeline.keys.push(key);
-							}
-						}
-						animation.eventlines.push(timeline);
-					}
-				}
-				entity.animations.push(animation);
-			}
-			this.entities.push(entity);
-			if(!this.entity||this.properties[1]===entity.name)
-			{
-				this.entity=entity;
-			}
-		}
-	};
-	instanceProto.forceCharacterFromPreload = function()
-	{
-		this.getCharacterFromPreload();
-	}
-	instanceProto.getCharacterFromPreload = function()
-	{
-		if(this.type.scmlFiles.hasOwnProperty(this.properties[0]))
-		{
-			{
-				this.setEntitiesToOtherEntities(this.type.scmlFiles[this.properties[0]]);
-				if(this.type.objectArrays.hasOwnProperty(this.properties[0]))
-				{
-					this.objectArray=this.type.objectArrays[this.properties[0]];
-					this.boneWidthArray=this.type.boneWidthArrays[this.properties[0]];
-				}
-				this.c2ObjectArray=this.generateTestC2ObjectArray(this.objectArray);
-				if(this.startingEntName)
-				{
-					this.setEntTo(this.startingEntName);
-				}
-				else
-				{
-					this.setEntTo(this.properties[1]);
-				}
-				this.associateAllTypes();
-				this.initDOMtoPairedObjects();
-				if(this.startingAnimName)
-				{
-					this.setAnimTo(this.startingAnimName);
-				}
-				else
-				{
-					this.setAnimTo(this.properties[2]);
-				}
-				if(!this.currentAnimation&&this.entity&&this.entity.animations.length)
-				{
-					this.setAnimTo(this.entity.animations[0].name);
-				}
-				if(this.startingLoopType&&this.currentAnimation)
-				{
-					this.currentAnimation.looping=startingLoopType;
-				}
-				this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.readyForSetup, this);
-			}
-			return true;
-		}
-		else if(this.type.scmlReserved.hasOwnProperty(this.properties[0]))
-		{
-			if(!this.type.scmlInstsToNotify[this.properties[0]])
-			{
-				this.type.scmlInstsToNotify[this.properties[0]]=[];
-			}
-			this.type.scmlInstsToNotify[this.properties[0]].push(this);
-			return true;
-		}
-		return false;
-	}
-	var PAUSENEVER=0;
-	var PAUSEALLOUTSIDEBUFFER=1;
-	var PAUSEALLBUTSOUNDOUTSIDEBUFFER=2;
-	var COMPONENTANGLE='0';
-	var COMPONENTX='1';
-	var COMPONENTY='2';
-	var COMPONENTSCALEX='3';
-	var COMPONENTSCALEY='4';
-	var COMPONENTIMAGE='5';
-	var COMPONENTPIVOTX='6';
-	var COMPONENTPIVOTY='7';
-	var COMPONENTENTITY='8';
-	var COMPONENTANIMATION='9';
-	var COMPONENTTIMERATIO='10';
-	instanceProto.onCreate = function()
-	{
-		this.nodeStack = [];
-		this.isDestroyed=false;
-		this.folders = [];
-		this.tagDefs = [];
-		this.currentAnimation = "";
-		this.secondAnimation = "";
-		this.animBlend=0.0;
-		this.blendStartTime=0.0;
-		this.blendEndTime=0.0;
-		this.blendPoseTime=0.0;
-		this.lastKnownInstDataAsObj = null;
-		this.lastZ = null;
-		this.c2ObjectArray = [];
-		this.objectArray=[];
-		this.boneWidthArray={};
-		this.boneIkOverrides={};
-		this.objectOverrides={};
-		this.objInfoVarDefs=[];
-		this.animPlaying = true;
-		this.speedRatio=1.0;
-		this.scaleRatio=this.width/50.0;
-		this.subEntScaleX=1.0;
-		this.subEntScaleY=1.0;
-		this.xFlip=false;
-		this.yFlip=false;
-		this.playTo=-1;
-		this.changeToStartFrom=0;
-		this.runtime.tickMe(this);
-		this.runtime.tick2Me(this);
-		this.startingEntName=null;
-		this.startingAnimName=null;
-		this.startingLoopType=null;
-		this.leftBuffer=0;
-		this.rightBuffer=0;
-		this.topBuffer=0;
-		this.bottomBuffer=0;
-		this.pauseWhenOutsideBuffer=PAUSENEVER;
-		this.soundToTrigger="";
-		this.soundLineToTrigger={};
-		this.eventToTrigger="";
-		this.eventLineToTrigger={};
-		this.lastFoundObject="";
-		this.objectsToSet=[];
-		this.drawSelf=this.properties[4]==1;
-		this.properties[0]=this.properties[0].toLowerCase();
-		if(this.properties[0].lastIndexOf(".scml")>-1)
-		{
-			this.properties[0]=this.properties[0].replace(".scml",".scon");
-		}
-		if((!this.getCharacterFromPreload())&&this.properties[0].length>0)
-		{
-			var self=this;
-			var request = null;
-			var doErrorFunc = function ()
-			{
-			};
-			var errorFunc = function ()
-			{
-			};
-			var progressFunc = function (e)
-			{
-			};
-			this.type.scmlReserved[this.properties[0]]=this;
-			request = new XMLHttpRequest();
-			var isNodeWebkit=this.runtime.isNodeWebkit;
-			request.onreadystatechange = function()
-			{
-				if (request.readyState === 4&&!self.isDestroyed)
-				{
-					if (request.status >= 400)
-					{
-;
-					}
-					else
-					{
-						request.responseText.replace(/\r\n/g, "\n");// fix windows style line endings
-						self.doRequest(JSON.parse(request.responseText));
-						if(self.startingEntName)
-						{
-							self.setEntTo(self.startingEntName);
-						}
-						if(self.startingAnimName)
-						{
-							self.setAnimTo(self.startingAnimName);
-						}
-						if(self.startingLoopType&&self.currentAnimation)
-						{
-							self.currentAnimation.looping=self.startingLoopType;
-						}
-					}
-				}
-			};
-			request.onerror = errorFunc;
-			request.ontimeout = errorFunc;
-			request.onabort = errorFunc;
-			request["onprogress"] = progressFunc;
-			request.open("GET", this.properties[0]);
-			request.send();
-		}
-		this.force=false;
-		this.inAnimTrigger=false;
-		this.changeAnimTo=null;
-		this.opacity=clamp(0.0,1.0,this.properties[3]/100.0);
-	};
-	instanceProto.onDestroy = function ()
-	{
-		this.isDestroyed=true;
-	};
-	instanceProto.getVarDefsByName = function (objName)
-	{
-		for(var o=0;o<this.objInfoVarDefs.length;o++)
-		{
-			var objInf=this.objInfoVarDefs[o];
-			if(objInf)
-			{
-				if(objInf.name===objName)
-				{
-					return objInf.varDefs;
-				}
-			}
-		}
-	}
-	instanceProto.getVarDefByName = function (objName,varName)
-	{
-		var objInf=this.getVarDefsByName(objName);
-		if(objInf)
-		{
-				for(var v=0;v<objInfo.varDefs.length;v++)
-				{
-					var varDef=objInfo.varDefs[v];
-					if(varDef)
-					{
-						if(varDef.name==varName)
-						{
-							return varDef;
-						}
-					}
-				}
-		}
-	}
-	function ObjInfo()
-	{
-		this.name="";
-		this.varDefs=[];
-	}
-	function SpriterEntity()
-	{
-		this.name = "";
-		this.animations = [];
-		this.varDefs = [];
-	}
-	function SpriterAnimation()
-	{
-		this.name = "";
-		this.length = 1;
-		this.looping = "true";
-		this.loopTo = 0;
-		this.mainlineKeys = [];
-		this.timelines = [];
-		this.soundlines = [];
-		this.eventlines = [];
-		this.meta = new MetaData();
-		this.cur_frame = 0;
-		this.localTime=0;
-		this.l = -25;
-		this.t = -25;
-		this.r = 25;
-		this.b = 25;
-	}
-	function SpriterTimeline()
-	{
-		this.keys = [];
-		this.name = "";
-		this.c2Object = 0;
-		this.object = 0;
-		this.objectType="sprite";
-		this.currentObjectState={};
-		this.currentMappedState={};
-		this.lastTimeSoundCheck=0;
-		this.meta = new MetaData();
-	}
-	function SpriterKey()
-	{
-		this.bones = [];
-		this.objects = [];
-		this.time = 0;
-		this.spin = 1;
-		this.curveType="linear";
-		this.c1=0;
-		this.c2=0;
-		this.c3=0;
-		this.c4=0;
-	}
-	function C2ObjectToSpriterObjectInstruction(initialC2Object,spriterObjectName,propertiesToSet)
-	{
-		this.c2Object=initialC2Object;
-		this.objectName=spriterObjectName;
-		this.setType=propertiesToSet;
-	}
-	function clamp(low,high,val)
-	{
-		if(val>high)
-		{
-			return high;
-		}
-		if(val<low)
-		{
-			return low;
-		}
-		return val;
-	}
-	function setTimeInfoFromJson(json,targetKey)
-	{
-		if(json.hasOwnProperty("time")&&targetKey.time !== undefined)
-		{
-			targetKey.time = json["time"];
-		}
-		if(json.hasOwnProperty("spin")&&targetKey.spin !== undefined)
-		{
-			targetKey.spin = (json["spin"]);
-		}
-		if(json.hasOwnProperty("curve_type")&&targetKey.curveType !== undefined)
-		{
-			targetKey.curveType = json["curve_type"];
-		}
-		if(json.hasOwnProperty("c1")&&targetKey.c1 !== undefined)
-		{
-			targetKey.c1 = json["c1"];
-		}
-		if(json.hasOwnProperty("c2")&&targetKey.c2 !== undefined)
-		{
-			targetKey.c2 = json["c2"];
-		}
-		if(json.hasOwnProperty("c3")&&targetKey.c3 !== undefined)
-		{
-			targetKey.c3 = json["c3"];
-		}
-		if(json.hasOwnProperty("c4")&&targetKey.c4 !== undefined)
-		{
-			targetKey.c4 = json["c4"];
-		}
-	}
-	instanceProto.setTimelinesFromJson = function(json,timelines,entity)
-	{
-		if(json)
-		{
-			for (var t = 0; t < json.length; t++)
-			{
-				var timelineTag=json[t];
-				var timeline = new SpriterTimeline();
-				if(timelineTag.hasOwnProperty("object_type"))
-				{
-					timeline.objectType = timelineTag["object_type"];
-				}
-				var timelineName=timelineTag["name"];
-				timeline.name=timelineName;
-				var keyTags = timelineTag["key"];
-				if(keyTags)
-				{
-					for (var k = 0; k<keyTags.length; k++)
-					{
-						var keyTag = keyTags[k];
-						var key = new SpriterKey();
-						setTimeInfoFromJson(keyTag,key);
-						var objectTags = keyTag["object"];
-						if(objectTags)
-						{
-							var objectTag=objectTags;
-							var object=this.objectFromTag(objectTag,this.objectArray,timelineName,timeline.objectType,entity.name);
-							key.objects.push(object);
-						}
-						var boneTags = keyTag["bone"];
-						if(boneTags)
-						{
-							var boneTag=boneTags;
-							var bone=this.objectFromTag(boneTag,this.objectArray,timelineName,timeline.objectType,entity.name);
-							key.bones.push(bone);
-						}
-						timeline.keys.push(key);
-					}
-				}
-				timeline.c2Object=this.c2ObjectArray[findObjectItemInArray(timelineName,this.objectArray,entity.name)];
-				var obj=objectFromArray(timelineName,this.objectArray,entity.name);
-				var defs={};
-				if(obj)
-				{
-					defs=obj.varDefs;
-				}
-				timeline.object=obj;
-				this.setMetaDataFromJson(timelineTag["meta"],timeline.meta,defs);
-				timelines.push(timeline);
-			}
-		}
-	}
-	instanceProto.setSoundlinesFromJson = function(json,timelines,entityname)
-	{
-		if(json)
-		{
-			for (var t = 0; t < json.length; t++)
-			{
-				var timelineTag=json[t];
-				var timeline = new SpriterTimeline();
-				timeline.objectType = "sound";
-				var timelineName=timelineTag["name"];
-				timeline.name=timelineName;
-				var keyTags = timelineTag["key"];
-				if(keyTags)
-				{
-					for (var k = 0; k<keyTags.length; k++)
-					{
-						var keyTag = keyTags[k];
-						var key = new SpriterKey();
-						setTimeInfoFromJson(keyTag,key);
-						var soundTags = keyTag["object"];
-						if(soundTags)
-						{
-							var soundTag=soundTags;
-							var sound=this.soundFromTag(soundTag);
-							key.objects.push(sound);
-						}
-						timeline.keys.push(key);
-					}
-				}
-				var obj=objectFromArray(timeline.name,this.objectArray,entityname);
-				this.setMetaDataFromJson(timelineTag["meta"],timeline.meta,this.getVarDefsByName(timeline.name));
-				timelines.push(timeline);
-			}
-		}
-	}
-	instanceProto.setVarlinesFromJson = function(json,timelines,vardefs)
-	{
-		if(json)
-		{
-			for (var t = 0; t < json.length; t++)
-			{
-				var timelineTag=json[t];
-				var timeline = new VarLine();
-				timeline.defIndex=timelineTag["def"];
-				timeline.def=vardefs[timeline.defIndex];
-				var keyTags = timelineTag["key"];
-				if(keyTags)
-				{
-					for (var k = 0; k<keyTags.length; k++)
-					{
-						var keyTag = keyTags[k];
-						var key = new VarKey();
-						setTimeInfoFromJson(keyTag,key);
-						key.val=keyTag["val"];
-						timeline.keys.push(key);
-					}
-				}
-				timelines.push(timeline);
-			}
-		}
-	}
-	instanceProto.setEventlinesFromJson = function(json,timelines,entityname)
-	{
-		if(json)
-		{
-			for (var t = 0; t < json.length; t++)
-			{
-				var timelineTag=json[t];
-				var timeline = new EventLine();
-				timeline.name=timelineTag["name"];
-				var keyTags = timelineTag["key"];
-				if(keyTags)
-				{
-					for (var k = 0; k<keyTags.length; k++)
-					{
-						var keyTag = keyTags[k];
-						var key = new EventKey();
-						setTimeInfoFromJson(keyTag,key);
-						timeline.keys.push(key);
-					}
-				}
-				this.setMetaDataFromJson(timelineTag["meta"],timeline.meta,this.getVarDefsByName(timeline.name));
-				timelines.push(timeline);
-			}
-		}
-	}
-	instanceProto.setTaglinesFromJson = function(json,timeline)
-	{
-		if(json)
-		{
-			var keyTags = json["key"];
-			if(keyTags)
-			{
-				for (var k = 0; k<keyTags.length; k++)
-				{
-					var keyTag = keyTags[k];
-					var key = new TagKey();
-					setTimeInfoFromJson(keyTag,key);
-					var tagTags=keyTag["tag"];
-					var tags=key.tags;
-					if(tagTags)
-					{
-						for(var ta=0;ta<tagTags.length;ta++)
-						{
-							var tagTag=tagTags[ta];
-							if(tagTag)
-							{
-								tags.push(this.tagDefs[tagTag["t"]]);
-							}
-						}
-					}
-					timeline.keys.push(key);
-				}
-			}
-		}
-	}
-	instanceProto.setMetaDataFromJson = function(json,meta,vardefs)
-	{
-		if(json)
-		{
-			var innerTag=json["tagline"];
-			if(innerTag)
-			{
-				this.setTaglinesFromJson(innerTag,meta.tagline);
-			}
-			innerTag=json["valline"];
-			if(innerTag)
-			{
-				this.setVarlinesFromJson(innerTag,meta.varlines,vardefs);
-			}
-		}
-	}
-	function TagKey()
-	{
-		this.tags = [];
-		this.time = 0;
-	}
-	function VarKey()
-	{
-		this.val = 0;
-		this.time = 0;
-		this.spin = 1;
-		this.curveType="linear";
-		this.c1=0;
-		this.c2=0;
-		this.c3=0;
-		this.c4=0;
-	}
-	function SpriterObject()
-	{
-		this.type = "sprite";
-		this.x = 0;
-		this.y = 0;
-		this.angle = 0;
-		this.a = 1;
-		this.xScale = 1;
-		this.yScale = 1;
-		this.pivotX = 0.0;
-		this.pivotY = 0.0;
-		this.entity = 0;
-		this.animation = "";
-		this.t = 0;
-		this.defaultPivot = false;
-		this.frame = 0;
-		this.storedFrame = 0;
-	}
-	function SpriterSound()
-	{
-		this.type = "sound";
-		this.name = "";
-		this.trigger = true;
-		this.panning=0.0;
-		this.volume=1.0;
-	}
-	function EventKey()
-	{
-		this.time = 0;
-	}
-	function CloneObject(other)
-	{
-		if(other)
-		{
-			var newObj=new SpriterObject();
-			newObj.type = other.type;
-			newObj.x = other.x;
-			newObj.y = other.y;
-			newObj.angle = other.angle;
-			newObj.a = other.a;
-			newObj.xScale = other.xScale;
-			newObj.yScale = other.yScale;
-			newObj.pivotX = other.pivotX;
-			newObj.pivotY = other.pivotY;
-			newObj.entity = other.entity;
-			newObj.animation = other.animation;
-			newObj.t = other.t;
-			newObj.defaultPivot = other.defaultPivot;
-			newObj.frame = other.frame;
-			newObj.storedFrame = newObj.storedFrame;
-			return newObj;
-		}
-		else
-		{
-			return null;
-		}
-	}
-	function sampleCurve(a,b,c,t)
-	{
-		return ((a*t+b)*t+c)*t;
-	}
-	function sampleCurveDerivativeX(ax, bx, cx, t)
-	{
-		return (3.0*ax*t+2.0*bx)*t+cx;
-	}
-	function solveEpsilon(duration)
-	{
-		return 1.0/(200.0*duration);
-	}
-	function solve(ax,bx,cx,ay,by,cy,x,epsilon)
-	{
-		return sampleCurve(ay,by,cy,solveCurveX(ax,bx,cx,x,epsilon));
-	}
-	function fabs(n)
-	{
-		if(n>=0)
-		{
-			return n;
-		}
-		else
-		{
-			return 0-n;
-		}
-	}
-	function solveCurveX(ax,bx,cx,x,epsilon)
-	{
-		var t0;
-		var t1;
-		var t2;
-		var x2;
-		var d2;
-		var i;
-		for(t2=x, i=0; i<8; i++)
-		{
-			x2=sampleCurve(ax,bx,cx,t2)-x;
-			if(fabs(x2)<epsilon)
-			{
-				return t2;
-			}
-			d2=sampleCurveDerivativeX(ax,bx,cx,t2);
-			if(fabs(d2)<1e-6)
-			{
-				break;
-			}
-			t2=t2-x2/d2;
-		}
-		t0=0.0;
-		t1=1.0;
-		t2=x;
-		if(t2<t0)
-		{
-			return t0;
-		}
-		if(t2>t1)
-		{
-			return t1;
-		}
-		while(t0<t1)
-		{
-			x2=sampleCurve(ax,bx,cx,t2);
-			if(fabs(x2-x)<epsilon)
-			{
-				return t2;
-			}
-			if(x>x2)
-			{
-				t0=t2;
-			}
-			else
-			{
-				t1=t2;
-			}
-			t2=(t1-t0)*.5+t0;
-		}
-		return t2; // Failure.
-	}
-	function CubicBezierAtTime(t,p1x,p1y,p2x,p2y,duration)
-	{
-		var ax=0;
-		var bx=0;
-		var cx=0;
-		var ay=0;
-		var by=0;
-		var cy=0;
-		cx=3.0*p1x;
-		bx=3.0*(p2x-p1x)-cx;
-		ax=1.0-cx-bx;
-		cy=3.0*p1y;
-		by=3.0*(p2y-p1y)-cy;
-		ay=1.0-cy-by;
-		return solve(ax,bx,cx,ay,by,cy,t, solveEpsilon(duration));
-	}
-	function getT(a,b,x)
-	{
-		if(a===b)
-		{
-			return 0;
-		}
-		return (x-a)/(b-a);
-	}
-	function qerp(a,b,c,t)
-	{
-		return cr.lerp(cr.lerp(a,b,t),cr.lerp(b,c,t),t);
-	}
-	function cerp(a,b,c,d,t)
-	{
-		return cr.lerp(qerp(a,b,c,t),qerp(b,c,d,t),t);
-	}
-	function quartic(a,b,c,d,e,t)
-	{
-		return cr.lerp(cerp(a,b,c,d,t),cerp(b,c,d,e,t),t);
-	}
-	function quintic(a,b,c,d,e,f,t)
-	{
-		return cr.lerp(quartic(a,b,c,d,e,t),quartic(b,c,d,e,f,t),t);
-	}
-	function trueT(key,t)
-	{
-		switch(key.curveType)
-		{
-		case "linear":
-			return t;
-		case "quadratic":
-			return qerp(0,key.c1,1,t);
-		case "cubic":
-			return cerp(0,key.c1,key.c2,1,t);
-		case "quartic":
-			return quartic(0,key.c1,key.c2,key.c3,1,t);
-		case "quintic":
-			return quintic(key.c1,key.c2,key.c3,key.c4,t);
-		case "bezier":
-			 return CubicBezierAtTime(t,key.c1,key.c2,key.c3,key.c4,1.0);
-		case "instant":
-			if(t>=1)
-			{
-				return 1;
-			}
-			else
-			{
-				return 0;
-			}
-		}
-		return 0;
-	}
-	function TweenedSpriterObject(a,b,t,spin,wFactor,hFactor)
-	{
-		wFactor = typeof wFactor !== 'undefined' ? wFactor : 1;
-		hFactor = typeof hFactor !== 'undefined' ? hFactor : 1;
-		var newObj=new SpriterObject();
-		newObj.type = a.type;
-		newObj.x = cr.lerp(a.x,b.x,t);
-		newObj.y = cr.lerp(a.y,b.y,t);
-		newObj.angle = anglelerp2(a.angle,b.angle,t,spin);
-		newObj.a = cr.lerp(a.a,b.a,t);
-		newObj.xScale = cr.lerp(a.xScale,b.xScale,t);
-		newObj.yScale = cr.lerp(a.yScale,b.yScale,t);
-		newObj.pivotX = a.pivotX;//cr.lerp(a.pivotX,b.pivotX,t);
-		newObj.pivotY = a.pivotY;//cr.lerp(a.pivotY,b.pivotY,t);
-		newObj.defaultPivot = a.defaultPivot;
-		newObj.frame = a.frame;
-		newObj.entity = a.entity;
-		newObj.animation = a.animation;
-		newObj.t = cr.lerp(a.t,b.t,t);
-		newObj.storedFrame=a.storedFrame;
-		return newObj;
-	}
-	function TweenedSpriterSound(a,b,t)
-	{
-		var newSound=new SpriterSound();
-		newSound.trigger = a.trigger;
-		newSound.volume = cr.lerp(a.volume,b.volume,t);
-		newSound.panning = cr.lerp(a.panning,b.panning,t);
-		newSound.name =a.name;
-		return newSound;
-	}
-	function SpriterObjectRef()
-	{
-		this.type = "reference";
-		this.timeline = 0;
-		this.key = 0;
-		this.parent = -1;
-	}
-	function SpriterFolder()
-	{
-		this.files = [];
-	}
-	function VarDef()
-	{
-		this.name = "";
-		this.type = "";
-		this.def = "";
-	}
-	function TagLine()
-	{
-		this.keys=[];
-		this.lastTagIndex=0;
-		this.currentTags=[];
-	}
-	function MetaData()
-	{
-		this.varlines = [];
-		this.tagline = new TagLine();
-	}
-	function VarLine()
-	{
-		this.varDef = {};
-		this.defIndex = 0;
-		this.keys = [];
-		this.lastTagIndex=0;
-		this.currentVal=0;
-	}
-	function EventLine()
-	{
-		this.name="";
-		this.keys=[];
-		this.meta = new MetaData();
-	}
-	function SpriterFile()
-	{
-		this.fileName="";
-		this.pivotX=0;
-		this.pivotY=0;
-		this.w=1;
-		this.h=1;
-		this.atlasX=0;
-		this.atlasY=0;
-		this.atlasXOff=0;
-		this.atlasYOff=0;
-		this.atlasW=0;
-		this.atlasH=0;
-		this.atlasRotated=false;
-	}
-	function SetSpriteAnimFrame(sprite,framenumber,c2Object)
-	{
-		if(c2Object&&c2Object.appliedMap[framenumber]!==undefined)
-		{
-			if(c2Object.appliedMap[framenumber]===-1)
-			{
-				if(sprite)
-				{
-					sprite.visible=false;
-				}
-				framenumber=-1;
-			}
-			else
-			{
-				framenumber=c2Object.appliedMap[framenumber];
-			}
-		}
-		if(sprite)
-		{
-			sprite.changeAnimFrame = framenumber;
-			if (!sprite.isTicking)
-			{
-				sprite.runtime.tickMe(sprite);
-				sprite.isTicking = true;
-			}
-			if (!sprite.inAnimTrigger)
-			{
-				sprite.doChangeAnimFrame();
-			}
-		}
-		return framenumber;
-	}
-	function anglelerp(a, b, x)
-	{
-		var diff = cr.angleDiff(a, b);
-		if (cr.angleClockwise(b, a))
-		{
-			return (a + diff * x);
-		}
-		else
-		{
-			return (a - diff * x);
-		}
-	}
-	function anglelerp2(a, b, x, spin)
-	{
-		if(spin===0)
-		{
-			return a;
-		}
-		var diff = cr.angleDiff(a, b);
-		if (spin==-1)
-		{
-			return (a + diff * x);
-		}
-		else
-		{
-			return (a - diff * x);
-		}
-	}
-	function findInArray(item,arr)
-	{
-		for(var i=0;i<arr.length;i++)
-		{
-			if(arr[i]==item)
-			{
-				return i;
-			}
-		}
-		return -1;
-	}
-	instanceProto.isOutsideViewportBox = function()
-	{
-		var layer = (this.layer);
-		if(layer)
-		{
-			if(this.x<layer.viewLeft-this.leftBuffer)
-			{
-				return true;
-			}
-			if(this.x>layer.viewRight+this.rightBuffer)
-			{
-				return true;
-			}
-			if(this.y<layer.viewTop-this.topBuffer)
-			{
-				return true;
-			}
-			if(this.y>layer.viewBottom+this.bottomBuffer)
-			{
-				return true;
-			}
-		}
-		return false;
-	}
-	instanceProto.MoveToLayer = function (inst,layerMove)
-	{
-		if (!layerMove || layerMove == inst.layer)
-		{
-		return;
-		}
-		cr.arrayRemove(inst.layer.instances, inst.get_zindex());
-		inst.layer.setZIndicesStaleFrom(0);
-		inst.layer = layerMove;
-		inst.zindex = layerMove.instances.length;
-		layerMove.instances.push(inst);
-		inst.runtime.redraw = true;
-	};
-	instanceProto.animationFinish = function (reverse)
-	{
-		this.animTriggerName = this.currentAnimation.name;
-		var animTrigger=this.inAnimTrigger;
-		if(this.inAnimTrigger===false)
-		{
-			this.inAnimTrigger = true;
-			this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.OnAnyAnimFinished, this);
-			this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.OnAnimFinished, this);
-			this.inAnimTrigger = false;
-		}
-	};
-	instanceProto.clearAnimationState = function()
-	{
-		var anim=this.currentAnimation;
-		if(anim)
-		{
-			for(var t=0;t<anim.timelines.length;t++)
-			{
-				anim.timelines[t].currentObjectState={};
-			}
-		}
-	}
-	instanceProto.getNowTime = function()
-	{
-		return (cr.performance_now() - this.start_time) / 1000.0;
-	};
-	instanceProto.doAnimChange = function()
-	{
-		if(this.currentAnimation)
-		{
-			var ratio=this.currentSpriterTime/this.currentAnimation.length;
-		}
-		var startFrom=this.changeToStartFrom;
-		if(startFrom<3)
-		{
-			this.currentAnimation=this.changeAnimTo;
-			this.changeAnimTo=null;
-			if(startFrom===0)//play from start
-			{
-				if(this.speedRatio>0)
-				{
-					this.currentSpriterTime=0;
-				}
-				else
-				{
-					this.currentSpriterTime=this.currentAnimation.length;
-				}
-				this.lastKnownTime=this.getNowTime();
-			}
-			else if (startFrom==2)//play from current time ratio
-			{
-				this.currentSpriterTime=this.currentAnimation.length*ratio;
-				this.lastKnownTime=this.getNowTime();
-			}
-			this.width = (this.currentAnimation.r-this.currentAnimation.l)*this.scaleRatio;
-			this.height = (this.currentAnimation.b-this.currentAnimation.t)*this.scaleRatio;
-			this.hotspotX = -(this.xFlip?(-this.currentAnimation.r):this.currentAnimation.l)/this.width*this.scaleRatio;
-			this.hotspotY = -(this.yFlip?(-this.this.currentAnimation.b):this.currentAnimation.t)/this.height*this.scaleRatio;
-			this.set_bbox_changed();
-		}
-	};
-	instanceProto.endBlendAndSwap = function()
-	{
-		if(this.secondAnimation)
-		{
-			this.blendEndTime=0;
-			this.blendStartTime=0;
-			this.animBlend=0;
-			this.blendPoseTime=0;
-			if(this.changeToStartFrom===BLENDTOSTART)
-			{
-				this.currentSpriterTime=0;
-			}
-			this.currentSpriterTime=this.secondAnimation.localTime;//cr.lerp(0,this.secondAnimation.length,getT(0,this.currentAnimation.length,this.currentSpriterTime));
-			this.changeAnimTo=null;
-			this.currentAnimation=this.secondAnimation;
-			this.secondAnimation=null;
-			this.changeToStartFrom=1;//play from current time
-		}
-	};
-	instanceProto.tickCurrentAnimationTime = function()
-	{
-		var lastKnownTime=this.lastKnownTime;
-		var nowTime=this.getNowTime();
-		this.lastKnownTime=nowTime;
-		var lastSpriterTime=this.currentSpriterTime;
-		var cur_timescale=this.ignoreGlobalTimeScale?1:this.runtime.timescale;
-		var animation=this.currentAnimation;
-		if (this.my_timescale !== -1.0)
-		{
-			cur_timescale=this.my_timescale;
-		}
-		if(this.animPlaying)
-		{
-			this.currentSpriterTime+=(this.getNowTime()-lastKnownTime)*1000*this.speedRatio*cur_timescale;
-		}
-		var playTo=this.playTo;
-		var animFinished=false;
-		if(playTo>=0)
-		{
-			if(this.animPlaying)
-			{
-				if(((lastSpriterTime-playTo)*(this.currentSpriterTime-playTo))<0)
-				{
-					this.animPlaying=false;
-					this.currentSpriterTime=this.playTo;
-					this.playTo=-1;
-					animFinished=true;
-				}
-			}
-		}
-		else
-		{
-			if(this.speedRatio>=0)
-			{
-				if(this.currentSpriterTime>=animation.length)
-				{
-					if(this.changeToStartFrom===BLENDTOSTART&&this.secondAnimation&&this.blendEndTime>0)
-					{
-					}
-					else
-					{
-						if(animation.looping=="false")
-						{
-							this.currentSpriterTime=animation.length;
-							this.animPlaying=false;
-						}
-						animFinished=true;
-					}
-				}
-			}
-			else
-			{
-				if(this.speedRatio<0)
-				{
-					if(this.currentSpriterTime<0)
-					{
-						if(this.changeToStartFrom===BLENDTOSTART&&this.secondAnimation&&this.blendEndTime>0)
-						{
-						}
-						else
-						{
-							if(animation.looping=="false")
-							{
-								this.currentSpriterTime=0;
-								this.animPlaying=false;
-							}
-							animFinished=true;
-						}
-					}
-				}
-			}
-		}
-		animation=this.currentAnimation;
-		while(this.currentSpriterTime<0)
-		{
-			this.currentSpriterTime+=animation.length;
-		}
-		if(this.currentSpriterTime!==animation.length)
-		{
-			this.currentSpriterTime%=animation.length;
-		}
-		if(this.secondAnimation)
-		{
-			if(this.changeToStartFrom===BLENDTOSTART)
-			{
-				this.secondAnimation.localTime=0;
-			}
-			else
-			{
-				this.secondAnimation.localTime=cr.lerp(0,this.secondAnimation.length,getT(0,this.currentAnimation.length,this.currentSpriterTime));
-			}
-		}
-		var blendEndTime=this.blendEndTime;
-		if(blendEndTime>0)
-		{
-			if(blendEndTime<=nowTime)
-			{
-				this.endBlendAndSwap();
-			}
-			else
-			{
-				this.animBlend=getT(this.blendStartTime,blendEndTime,this.lastKnownTime);
-			}
-		}
-		return animFinished;
-	};
-	instanceProto.setMainlineKeyByTime = function(animation)
-	{
-		animation=(typeof animation!=='undefined')?animation:this.currentAnimation;
-		if(animation)
-		{
-			var currentTime=0;
-			if(animation===this.currentAnimation)
-			{
-				if(this.changeToStartFrom===BLENDTOSTART)
-				{
-					currentTime=this.blendPoseTime;
-				}
-				else
-				{
-					currentTime=this.currentSpriterTime;
-				}
-			}
-			else
-			{
-				currentTime=animation.localTime;
-			}
-			var mainKeys=animation.mainlineKeys;
-			animation.cur_frame=mainKeys.length;
-			var secondTime=animation.length;
-			for (var k=1;k<mainKeys.length;k++)
-			{
-				if (currentTime < mainKeys[k].time)
-				{
-					secondTime=mainKeys[k].time;
-					animation.cur_frame = k - 1;
-					break;
-				}
-			}
-			var firstTime=0;
-			if(animation===this.currentAnimation)
-			{
-				this.currentAdjustedTime=currentTime;
-			}
-			if (animation.cur_frame < 0)
-			{
-				animation.cur_frame = 0;
-			}
-			else if (animation.cur_frame >= animation.mainlineKeys.length)
-			{
-				animation.cur_frame = animation.mainlineKeys.length - 1;
-			}
-			var mainKey=mainKeys[animation.cur_frame];
-			if(mainKey)
-			{
-				firstTime=mainKey.time;
-				if(animation===this.currentAnimation)
-				{
-					var t=getT(firstTime,secondTime,this.currentSpriterTime);
-					this.currentAdjustedTime=cr.lerp(firstTime,secondTime,trueT(mainKey,t));
-				}
-				else
-				{
-					var t=getT(firstTime,secondTime,animation.localTime);
-					if(this.changeToStartFrom===BLENDTOSTART)
-					{
-						animation.localTime=0;
-					}
-					else
-					{
-						animation.localTime=cr.lerp(firstTime,secondTime,trueT(mainKey,t));
-					}
-				}
-			}
-		}
-	};
-	instanceProto.doSecondAnimation = function()
-	{
-		return this.animBlend!==0&&this.secondAnimation;
-	}
-	function shortestSpin(a,b)
-	{
-		if(a===b)
-			return 0;
-		var pi=3.141592653589793;
-		var rad=pi*2;
-		while(b-a<-pi)
-		{
-			a-=rad;
-		}
-		while(b-a>pi)
-		{
-			b-=rad;
-		}
-		return b>a?-1:1;
-	}
-	instanceProto.tweenBone = function(bone, tweenedBones, animation, bones, currentIndex, currentTime, nextTime, key)
-	{
-		var nextBone = null;
-		var nextFrame = null;
-		var timelineIndex;
-		var parent=bone.parent;
-		if (bone.type == "reference")
-		{
-			var refTimeline = animation.timelines[bone.timeline];
-			var timelineName=refTimeline.name;
-			timelineIndex=bone.timeline;
-			var refKey = refTimeline.keys[bone.key];
-			var refKeyIndex = bone.key;
-			lastTime = refKey.time;
-			var nextFrame = null;
-			var keysLength = refTimeline.keys.length;
-			bone = refKey.bones[0];
-			if(keysLength>1)
-			{
-				if(refKeyIndex+1>=keysLength&&animation.looping=="true")
-				{
-					nextFrame=refTimeline.keys[0];
-					nextTime=nextFrame.time;
-					if(currentTime>lastTime)
-					{
-						nextTime+=animation.length;
-					}
-					nextBone=nextFrame.bones[0];
-				}
-				else if(refKeyIndex+1<keysLength)
-				{
-					nextFrame=refTimeline.keys[refKeyIndex+1];
-					nextTime=nextFrame.time;
-					nextBone=nextFrame.bones[0];
-				}
-			}
-			var mirror_factor = (this.xFlip == 1 ? -1 : 1);
-			var flip_factor = (this.yFlip == 1 ? -1 : 1);
-			var flipMe=1;
-			var parentBone="";
-			if(nextBone&&refKey.curveType!=="instant")
-			{
-				var lastTime=refKey.time;
-				var t=0;
-				if(currentTime<lastTime)
-				{
-					lastTime-=animation.length;
-				}
-				if(nextTime>lastTime)
-				{
-					t=(currentTime-lastTime)/(nextTime-lastTime);
-				}
-				t=trueT(refKey,t);
-				tweenedBones[currentIndex]=TweenedSpriterObject(bone,nextBone,t,refKey.spin);
-			}
-			else
-			{
-				tweenedBones[currentIndex]=CloneObject(bone);
-			}
-			refTimeline.currentMappedState=CloneObject(tweenedBones[currentIndex]);
-			if(animation===this.currentAnimation)
-			{
-				if(this.animBlend!==0&&this.secondAnimation)
-				{
-					var secondTimeline=this.timelineFromName(refTimeline.name,this.secondAnimation);
-					if(secondTimeline)
-					{
-						var secondBone=secondTimeline.currentObjectState;
-						if(secondBone)
-						{
-							var firstBone=tweenedBones[currentIndex];
-							tweenedBones[currentIndex]=TweenedSpriterObject(firstBone,secondBone,this.animBlend,shortestSpin(firstBone.angle,secondBone.angle));
-						}
-					}
-				}
-			}
-			if(parent>-1)
-			{
-				if(animation===this.currentAnimation)
-				{
-					flipMe=tweenedBones[parent].xScale*tweenedBones[parent].yScale;
-				}
-				parentBone=tweenedBones[parent];
-			}
-			else
-			{
-				if(animation===this.currentAnimation)
-				{
-					tweenedBones[currentIndex].x*=mirror_factor*this.scaleRatio;
-					tweenedBones[currentIndex].y*=flip_factor*this.scaleRatio;
-					tweenedBones[currentIndex].xScale*=mirror_factor*this.scaleRatio;
-					tweenedBones[currentIndex].yScale*=flip_factor*this.scaleRatio;
-					parentBone=this.objFromInst(this);
-					parentBone.xScale*=this.subEntScaleX;
-					parentBone.yScale*=this.subEntScaleY;
-					flipMe=mirror_factor*flip_factor;
-				}
-			}
-			if(animation===this.currentAnimation)
-			{
-				tweenedBones[currentIndex]=this.mapObjToObj(parentBone,tweenedBones[currentIndex],flipMe);
-			}
-			var overrideComponents=this.objectOverrides[timelineName];
-			if (typeof overrideComponents !== "undefined")
-			{
-				for(var component in overrideComponents)
-				{
-					switch(component)
-					{
-						case COMPONENTANGLE:
-							tweenedBones[currentIndex].angle=cr.to_radians(overrideComponents[component]);
-							this.force=true;
-							break;
-						case COMPONENTX:
-							tweenedBones[currentIndex].x=overrideComponents[component];
-							this.force=true;
-							break;
-						case COMPONENTY:
-							tweenedBones[currentIndex].y=overrideComponents[component];
-							this.force=true;
-							break;
-						case COMPONENTSCALEX:
-							tweenedBones[currentIndex].xScale=overrideComponents[component];
-							this.force=true;
-							break;
-						case COMPONENTSCALEY:
-							tweenedBones[currentIndex].yScale=overrideComponents[component];
-							this.force=true;
-							break;
-						default:
-							break;
-					}
-				}
-			}
-			var ikOverride=this.boneIkOverrides[timelineName];
-			if (typeof ikOverride !== "undefined")
-			{
-				var tweenedChildBone={};
-				var childRefTimeline={};
-				var childTimelineName="";
-				for(var i = currentIndex+1; i < key.bones.length; i++)
-				{
-					var childBone = key.bones[i];
-					childRefTimeline = animation.timelines[childBone.timeline];
-					childTimelineName=childRefTimeline.name;
-					if(childTimelineName===ikOverride.childBone)
-					{
-						this.tweenBone(childBone, tweenedBones, animation, bones, i, currentTime, nextTime, key);
-						tweenedChildBone=tweenedBones[i];
-						this.force=true;
-						break;
-					}
-				}
-				childRefTimeline.currentObjectState=this.applyIk(ikOverride.targetX, ikOverride.targetY, ikOverride.additionalLength, tweenedBones[currentIndex],
-childRefTimeline.currentObjectState, childRefTimeline.currentMappedState, this.boneWidthArray[childTimelineName], currentTime, nextTime, key);
-				tweenedBones[i]=childRefTimeline.currentObjectState;
-			}
-			refTimeline.currentObjectState=CloneObject(tweenedBones[currentIndex]);
-		}
-	}
-	instanceProto.currentTweenedBones = function(animation)
-	{
-		var tweenedBones = [];
-		animation = (typeof animation !== 'undefined') ? animation : this.currentAnimation;
-		var key = animation.mainlineKeys[animation.cur_frame];
-		var nextTime = 0;
-		var currentTime=0;
-		this.clearAnimationState();
-		if(animation===this.currentAnimation)
-		{
-			if(this.changeToStartFrom===BLENDTOSTART)
-			{
-				currentTime=this.blendPoseTime;
-			}
-			else
-			{
-				currentTime=this.currentAdjustedTime;
-			}
-		}
-		else
-		{
-			currentTime=animation.localTime;
-		}
-		for(var i = 0; i < key.bones.length; i++)
-		{
-			var bone = key.bones[i];
-			if(!tweenedBones[i])
-			{
-				this.tweenBone(bone, tweenedBones, animation, key.bones, i, currentTime, nextTime, key);
-			}
-		}
-		return tweenedBones;
-	};
-	instanceProto.tick = function()
-	{
-		this.objectOverrides={};
-		this.boneIkOverrides={};
-	}
-	instanceProto.tick2 = function(ticklessRefresh)
-	{
-		if(this.secondAnimation===this.currentAnimation)
-		{
-			this.blendStartTime=0;
-			this.blendEndTime=0;
-			this.blendPoseTime=0;
-			this.secondAnimation=null;
-			this.changeAnimTo=0;
-			if(this.changeToStartFrom===BLENDTOSTART)
-			{
-				this.changeToStartFrom=0;
-			}
-			else if(this.changeToStartFrom===BLENDATCURRENTTIMERATIO)
-			{
-				this.changeToStartFrom=1;
-			}
-		}
-		if(this.changeAnimTo&&!this.inAnimTrigger)
-		{
-			this.doAnimChange();
-		}
-		var animation = this.currentAnimation;
-		if (!animation||this.inAnimTrigger)
-		{
-			return;
-		}
-		var changed=null;
-		if(!this.animPlaying)
-		{
-			if(!this.lastKnownInstDataAsObj||!this.instsEqual(this.lastKnownInstDataAsObj,this))
-			{
-				changed=true;
-				this.lastKnownInstDataAsObj=this.objFromInst(this);
-			}
-			else
-			{
-				var currZ=findInArray(this,this.layer.instances);
-				if(currZ!==this.lastZ)
-				{
-					changed=true;
-					this.lastZ=currZ;
-				}
-			}
-		}
-		if(!changed&&this.force)
-		{
-			changed=true;
-		}
-		this.force=false;
-		var pauseAllButSound=false;
-		var pauseAll=false;
-		if(this.pauseWhenOutsideBuffer!=PAUSENEVER)
-		{
-			var outsideBuffer=this.isOutsideViewportBox();
-			if(outsideBuffer)
-			{
-				if(this.pauseWhenOutsideBuffer==PAUSEALLOUTSIDEBUFFER)
-				{
-					pauseAll=true;
-				}
-				else if(this.pauseWhenOutsideBuffer==PAUSEALLBUTSOUNDOUTSIDEBUFFER)
-				{
-					pauseAllButSound=true;
-				}
-				this.setAllInvisible();
-			}
-		}
-		if(this.animPlaying||changed||ticklessRefresh)
-		{
-			if(this.animPlaying&&!ticklessRefresh)
-			{
-			var animFinished=this.tickCurrentAnimationTime();
-			if(animFinished)
-			{
-				this.animationFinish(this.speedRatio<0);
-				if(this.changeAnimTo&&!this.inAnimTrigger&&!this.animPlaying)
-				{
-					this.tick2();
-					return;
-				}
-			}
-			}
-		}
-		else
-		{
-			return;
-		}
-		if(pauseAll)
-		{
-			return;
-		}
-		animation=this.currentAnimation;
-		var c2ObjectArray=this.c2ObjectArray;
-		this.setAllCollisionsAndVisibility(false);
-		this.setMainlineKeyByTime();
-		this.runtime.redraw = true;
-		if (!animation.mainlineKeys[animation.cur_frame])
-		{
-			return;
-		}
-		if(!pauseAllButSound)
-		{
-			if(this.animBlend!==0&&this.secondAnimation)
-			{
-				if(this.changeToStartFrom===BLENDTOSTART)
-				{
-					this.secondAnimation.localTime=0;
-				}
-				else
-				{
-					this.secondAnimation.localTime=(this.currentSpriterTime/this.currentAnimation.length)*this.secondAnimation.length;
-				}
-				this.setMainlineKeyByTime(this.secondAnimation);
-				var secondTweenedBones=this.currentTweenedBones(this.secondAnimation);
-				this.animateCharacter(secondTweenedBones,this.secondAnimation,false);
-			}
-			var tweenedBones = this.currentTweenedBones();
-			this.animateCharacter(tweenedBones);
-		}
-		if(this.animPlaying)
-		{
-			this.animateSounds();
-			this.animateEvents();
-			this.animateMeta(animation.meta);
-		}
-		for(var i = 0; i < this.objectsToSet.length; i++)
-		{
-			var currentObjInstruction = this.objectsToSet[i];
-			var timeline=this.timelineFromName(currentObjInstruction.objectName);
-			if(timeline && timeline.currentObjectState)
-			{
-				var setType = currentObjInstruction.setType;
-				var objState = timeline.currentObjectState;
-				var c2Obj=currentObjInstruction.c2Object.getFirstPicked();
-				if(c2Obj)
-				{
-					if(setType === 0 || setType === 1)
-					{
-						c2Obj.angle = objState.angle;
-					}
-					if(setType === 0 || setType === 2)
-					{
-						c2Obj.x = objState.x;
-						c2Obj.y = objState.y;
-					}
-					c2Obj.set_bbox_changed();
-				}
-			}
-		}
-		this.objectsToSet = [];
-	};
-	instanceProto.animateCharacter = function(tweenedBones,animation,applyToInstances)
-	{
-		animation = (typeof animation !== 'undefined') ? animation : this.currentAnimation;
-		if(!animation)
-		{
-			return;
-		}
-		var cur_frame = animation.cur_frame;
-		var object;
-		var objectRef;
-		var nextObject = null;
-		var lastTime = 0;
-		var	nextTime = 0;
-		var myx = 0;
-		var myy = 0;
-		var w = 0;
-		var h = 0;
-		var layer=this.layer;
-		var entity = this.entity;
-		var zIndex=this.get_zindex();
-		applyToInstances = (typeof applyToInstances !== 'undefined') ? applyToInstances : true;
-		var key = animation.mainlineKeys[animation.cur_frame];
-		var refKey;
-		var instances=layer.instances;
-		var currentTime=0;
-		if(animation===this.currentAnimation)
-		{
-			if(this.changeToStartFrom===BLENDTOSTART)
-			{
-				currentTime=this.blendPoseTime;
-			}
-			else
-			{
-				currentTime=this.currentAdjustedTime;
-			}
-		}
-		else
-		{
-			currentTime=animation.localTime;
-		}
-		if(applyToInstances&&!this.drawSelf)
-		{
-			var zOrder=[];
-			for(var i = 0; i < key.objects.length; i++)
-			{
-				object = key.objects[i];
-				if (object.type == "reference")
-				{
-					var refTimeline = animation.timelines[object.timeline];
-					var c2Obj=refTimeline.c2Object;
-					if(c2Obj)
-					{
-						var inst=c2Obj.inst;
-						if(inst)
-						{
-							var currZ=findInArray(inst,instances);
-							if(currZ>=1&&currZ<=zIndex)
-							{
-								instances.splice(currZ,1);
-								zIndex--;
-							}
-						}
-					}
-				}
-			}
-			var tempZ=findInArray(this,instances);
-			if(zIndex!=tempZ)
-			{
-				instances.splice(tempZ,1);
-				if(tempZ<zIndex)
-				{
-					zIndex--;
-				}
-				instances.splice(zIndex,0,this);
-				layer.setZIndicesStaleFrom(0);
-				this.zindex=zIndex;
-			}
-		}
-		var zCounter=0;
-		for(var i = 0; i < key.objects.length; i++)
-		{
-			object = key.objects[i];
-			objectRef = key.objects[i];
-			nextObject = null;
-			var nextFrame = null;
-			var timelineIndex;
-			if (object.type == "reference")
-			{
-				var refTimeline = animation.timelines[object.timeline];
-				timelineIndex=object.timeline;
-				refKey = refTimeline.keys[object.key];
-				var refKeyIndex = object.key;
-				lastTime = refKey.time;
-				var nextFrame = null;
-				var keysLength = refTimeline.keys.length;
-				object = refKey.objects[0];
-				if(keysLength>1)
-				{
-					if(refKeyIndex+1>=keysLength&&animation.looping=="true")
-					{
-						nextFrame=refTimeline.keys[0];
-						nextTime=nextFrame.time;
-						if(currentTime>lastTime)
-						{
-							nextTime+=animation.length;
-						}
-						nextObject=nextFrame.objects[0];
-					}
-					else if(refKeyIndex+1<keysLength)
-					{
-						nextFrame=refTimeline.keys[refKeyIndex+1];
-						nextTime=nextFrame.time;
-						nextObject=nextFrame.objects[0];
-					}
-				}
-			}
-			myx = this.x;
-			myy = this.y;
-			var c2Obj=refTimeline.c2Object;
-			if(c2Obj||refTimeline.objectType==="point")
-			{
-				var inst;
-				if(c2Obj)
-				{
-					inst=c2Obj.inst;
-				}
-				else
-				{
-					inst=null;
-				}
-				if((inst||this.drawSelf)||refTimeline.objectType==="point"||refTimeline.objectType==="entity")
-				{
-					if(applyToInstances&&inst)
-					{
-						inst.collisionsEnabled = true;
-						inst.visible=this.visible;
-						this.MoveToLayer(inst,this.layer);
-					}
-					var tweenedObj=null;
-					if(nextObject&&key.curveType!=="instant"&&refKey.curveType!=="instant")
-					{
-						var t=0;
-						if(currentTime<lastTime)
-						{
-							lastTime-=animation.length;
-						}
-						if((nextTime-lastTime)>0)
-						{
-							t=(currentTime-lastTime)/(nextTime-lastTime);
-						}
-						t=trueT(refKey,t);
-						tweenedObj=TweenedSpriterObject(object,nextObject,t,refKey.spin);
-					}
-					else
-					{
-						tweenedObj=CloneObject(object);
-					}
-					if(applyToInstances&&c2Obj&&c2Obj.spriterType=="sprite")
-					{
-						tweenedObj.frame=SetSpriteAnimFrame(inst,object.frame,c2Obj);
-					}
-					if(inst)
-					{
-						var cur_frame = inst.curFrame;
-					}
-					var mirror_factor = (this.xFlip == 1 ? -1 : 1);
-					var flip_factor = (this.yFlip == 1 ? -1 : 1);
-					var parent=objectRef.parent;
-					refTimeline.currentMappedState=CloneObject(tweenedObj);
-					if(animation===this.currentAnimation)
-					{
-						if(this.animBlend!==0&&this.secondAnimation)
-						{
-							var secondTimeline=this.timelineFromName(refTimeline.name,this.secondAnimation);
-							if(secondTimeline)
-							{
-								var secondBone=secondTimeline.currentObjectState;
-								if(secondBone)
-								{
-									var firstBone=tweenedObj;
-									tweenedObj=TweenedSpriterObject(firstBone,secondBone,this.animBlend,shortestSpin(firstBone.angle,secondBone.angle));
-									if(this.animBlend>0.5)
-									{
-										tweenedObj.frame=SetSpriteAnimFrame(inst,secondTimeline.currentObjectState.frame,c2Obj);
-									}
-								}
-							}
-						}
-					}
-					if(animation===this.currentAnimation)
-					{
-						var flip=false;
-						if(parent>-1)
-						{
-							tweenedObj=this.mapObjToObj(tweenedBones[parent],tweenedObj,tweenedBones[parent].xScale*tweenedBones[parent].yScale);
-							tweenedObj.xScale*=mirror_factor;
-							tweenedObj.yScale*=flip_factor;
-							flip=tweenedBones[parent].xScale<0;
-						}
-						else
-						{
-							tweenedObj.x*=mirror_factor*this.scaleRatio*this.subEntScaleX;
-							tweenedObj.y*=flip_factor*this.scaleRatio*this.subEntScaleY;
-							tweenedObj.xScale*=this.subEntScaleX;
-							tweenedObj.yScale*=this.subEntScaleY;
-							tweenedObj=this.mapObjToObj(this.objFromInst(this),tweenedObj,mirror_factor*flip_factor);
-							flip=mirror_factor<0;
-						}
-						if(refTimeline.objectType==="point"&&flip)
-						{
-							tweenedObj.angle=tweenedObj.angle-cr.to_radians(180);
-						}
-					}
-					var overrodeImage=false;
-					if((inst||this.drawSelf)&&applyToInstances)
-					{
-						overrodeImage=this.applyObjToInst(tweenedObj,inst,parent>-1,c2Obj);
-					}
-					refTimeline.currentObjectState=tweenedObj;
-					if(this.drawSelf&&parent==-1)
-					{
-						refTimeline.currentObjectState.xScale*=this.scaleRatio;
-						refTimeline.currentObjectState.yScale*=this.scaleRatio;
-					}
-					if(!overrodeImage)
-					{
-						refTimeline.currentObjectState.frame=refTimeline.currentMappedState.frame;
-					}
-					if(this.drawSelf)
-					{
-						if(tweenedObj.defaultPivot)
-						{
-							var curPivot=c2Obj.obj.pivots[refTimeline.currentObjectState.frame];
-							if(!curPivot)
-							{
-								curPivot=c2Obj.obj.pivots[0];
-							}
-							if(curPivot)
-							{
-								refTimeline.currentObjectState.pivotX=curPivot.x;
-								refTimeline.currentObjectState.pivotY=curPivot.y;
-							}
-						}
-					}
-					this.animateMeta(refTimeline.meta);
-					if(inst&&applyToInstances)
-					{
-						var instZOrder=zIndex+1+zCounter++;
-						if(instances[instZOrder]!==inst)
-						{
-							var currInstanceZ=findInArray(inst,instances);
-							if(currInstanceZ>=0)
-							{
-								instances.splice(currInstanceZ,1);
-							}
-							instances.splice(instZOrder,0,inst);
-							inst.zorder=instZOrder;
-							layer.setZIndicesStaleFrom(0);
-						}
-					}
-				}
-			}
-		}
-	};
-	instanceProto.animateSounds = function(anim)
-	{
-		anim = (typeof anim !== 'undefined') ? anim : this.currentAnimation;
-		if(anim)
-		{
-			for(var s=0;s<anim.soundlines.length;s++)
-			{
-				var soundLine=anim.soundlines[s];
-				if(soundLine)
-				{
-					this.animateSound(soundLine,anim.length);
-				}
-			}
-		}
-	}
-	instanceProto.animateMeta = function(meta,anim)
-	{
-		anim = (typeof anim !== 'undefined') ? anim : this.currentAnimation;
-		if(anim)
-		{
-			this.animateTag(meta.tagline,anim.length,anim);
-			for(var s=0;s<meta.varlines.length;s++)
-			{
-				var varLine=meta.varlines[s];
-				if(varLine)
-				{
-					this.animateVar(varLine,anim.length,anim);
-				}
-			}
-		}
-	}
-	instanceProto.animateEvents = function(anim)
-	{
-		anim = (typeof anim !== 'undefined') ? anim : this.currentAnimation;
-		if(anim)
-		{
-			for(var s=0;s<anim.eventlines.length;s++)
-			{
-				var eventLine=anim.eventlines[s];
-				if(eventLine)
-				{
-					this.animateEvent(eventLine,anim.length);
-				}
-			}
-		}
-	}
-	instanceProto.animateSound = function(soundline,animLength,anim)
-	{
-		var soundKeys=soundline.keys;
-		var curSoundFrame=soundKeys.length;
-		var secondTime=animLength;
-		var curSoundKey=soundKeys[0];
-		var curSound;
-		this.animateMeta(soundline.meta);
-		for (var k=1;k<soundKeys.length;k++)
-		{
-			if (this.currentAdjustedTime < soundKeys[k].time)
-			{
-				secondTime=soundKeys[k].time;
-				curSoundFrame = k - 1;
-				curSoundKey=soundKeys[curSoundFrame];
-				break;
-			}
-		}
-		if(curSoundKey&&curSoundKey.objects&&curSoundKey.objects[0])
-		{
-			curSound=curSoundKey.objects[0];
-		}
-		anim = (typeof anim !== 'undefined') ? anim : this.currentAnimation;
-		var keysLength=soundline.keys.length;
-		var nextFrame;
-		var nextTime;
-		var nextObject;
-		if(keysLength>1)
-		{
-			if(curSoundFrame+1>=keysLength&&anim.looping=="true")
-			{
-				nextFrame=soundline.keys[0];
-				nextTime=nextFrame.time;
-				if(this.currentSpriterTime>lastTime)
-				{
-					nextTime+=anim.length;
-				}
-				nextObject=nextFrame.objects[0];
-			}
-			else if(curSoundFrame+1<keysLength)
-			{
-				nextFrame=soundline.keys[curSoundFrame+1];
-				nextTime=nextFrame.time;
-				nextObject=nextFrame.objects[0];
-			}
-		}
-		var time=this.currentAdjustedTime;
-		var lastTime=soundline.lastTimeSoundCheck;
-		if(time!=lastTime)
-		{
-			for (var k=0;k<soundKeys.length;k++)
-			{
-				var soundKey=soundKeys[k];
-				if(soundKey)
-				{
-					var soundToPlay=soundKey.objects[0];
-					if(soundToPlay)
-					{
-						if(time===soundKey.time)
-						{
-							this.playSound(soundline,soundToPlay.name);
-							break;
-						}
-						else
-						{
-							var t=-1;
-							if((time-lastTime>0&&(time-lastTime<lastTime+(anim.length-time)))||(lastTime-time>time+(anim.length-lastTime)))
-							{
-								if((time-lastTime>0)&&(time-lastTime<lastTime+(anim.length-time)))
-								{
-									t=getT(lastTime,time,soundKey.time);
-								}
-								else
-								{
-									t=getT(lastTime-anim.length,time,soundKey.time);
-								}
-							}
-							else if(time-lastTime<0||(lastTime-time<time+(anim.length-lastTime)))
-							{
-								if((time-lastTime<0))
-								{
-									t=getT(time,lastTime,soundKey.time);
-								}
-								else
-								{
-									t=getT(time-anim.length,lastTime,soundKey.time);
-								}
-							}
-							if(t>0&&t<1)
-							{
-								this.playSound(soundline,soundToPlay.name);
-							}
-						}
-					}
-				}
-			}
-		}
-		var tweenedSound;
-		if(nextObject)
-		{
-			var t=0;
-			var lastTime=curSoundKey.time;
-			if(this.currentAdjustedTime<lastTime)
-			{
-				lastTime-=anim.length;
-			}
-			var t=getT(lastTime,nextTime,this.currentAdjustedTime);
-			tweenedSound=TweenedSpriterSound(curSound,nextObject,trueT(curSoundKey,t));
-		}
-		else
-		{
-			tweenedSound=this.cloneSound(curSound);
-		}
-		this.changeVolume(soundline,tweenedSound.volume);
-		this.changePanning(soundline,tweenedSound.panning);
-		soundline.lastTimeSoundCheck=this.currentAdjustedTime;
-		soundline.currentObjectState=tweenedSound;
-	}
-	instanceProto.animateEvent = function(eventline,animLength,anim)
-	{
-		var eventKeys=eventline.keys;
-		var curEventFrame=eventKeys.length;
-		var secondTime=animLength;
-		var curEventKey=eventKeys[0];
-		var curEvent;
-		this.animateMeta(eventline.meta);
-		for (var k=1;k<eventKeys.length;k++)
-		{
-			if (this.currentAdjustedTime < eventKeys[k].time)
-			{
-				secondTime=eventKeys[k].time;
-				curEventFrame = k - 1;
-				curEventKey=eventKeys[curEventFrame];
-				break;
-			}
-		}
-		if(curEventKey&&curEventKey.objects&&curEventKey.objects[0])
-		{
-			curEvent=curEventKey.objects[0];
-		}
-		anim = (typeof anim !== 'undefined') ? anim : this.currentAnimation;
-		var keysLength=eventline.keys.length;
-		var nextFrame;
-		var nextTime;
-		if(keysLength>1)
-		{
-			if(curEventFrame+1>=keysLength&&anim.looping=="true")
-			{
-				nextFrame=eventline.keys[0];
-				nextTime=nextFrame.time;
-				if(this.currentSpriterTime>lastTime)
-				{
-					nextTime+=anim.length;
-				}
-			}
-			else if(curEventFrame+1<keysLength)
-			{
-				nextFrame=eventline.keys[curEventFrame+1];
-				nextTime=nextFrame.time;
-			}
-		}
-		var time=this.currentAdjustedTime;
-		var lastTime=eventline.lastTimeEventCheck;
-		if(time!=lastTime)
-		{
-			for (var k=0;k<eventKeys.length;k++)
-			{
-				var eventKey=eventKeys[k];
-				if(eventKey)
-				{
-					{
-						if(time===eventKey.time)
-						{
-							this.playEvent(eventline,eventline.name);
-							break;
-						}
-						else
-						{
-							var t=-1;
-							if((time-lastTime>0&&(time-lastTime<lastTime+(anim.length-time)))||(lastTime-time>time+(anim.length-lastTime)))
-							{
-								if((time-lastTime>0)&&(time-lastTime<lastTime+(anim.length-time)))
-								{
-									t=getT(lastTime,time,eventKey.time);
-								}
-								else
-								{
-									t=getT(lastTime-anim.length,time,eventKey.time);
-								}
-							}
-							else if(time-lastTime<0||(lastTime-time<time+(anim.length-lastTime)))
-							{
-								if((time-lastTime<0))
-								{
-									t=getT(time,lastTime,eventKey.time);
-								}
-								else
-								{
-									t=getT(time-anim.length,lastTime,eventKey.time);
-								}
-							}
-							if(t>0&&t<1)
-							{
-								this.playEvent(eventline,eventline.name);
-							}
-						}
-					}
-				}
-			}
-		}
-		eventline.lastTimeEventCheck=this.currentAdjustedTime;
-	}
-	instanceProto.animateVar = function(varline,animLength,anim)
-	{
-		anim = (typeof anim !== 'undefined') ? anim : this.currentAnimation;
-		var time=this.currentAdjustedTime;
-		var varKeys=varline.keys;
-		var firstVarFrame=-1;
-		var secondVarFrame=-1;
-		var firstTime=0;
-		var secondTime=0;
-		var firstVal=0;
-		var secondVal=0;
-		varline.lastTagIndex=0;
-		varline.currentVal=varline.def.def;
-		var type=varline.def.type;
-		var firstKey;
-		if(varKeys.length===0)
-		{
-			return;
-		}
-		if(varKeys.length>1)
-		{
-			for (var k=0;k<varKeys.length;k++)
-			{
-				if (time===varKeys[k].time)
-				{
-					varline.lastTagIndex=k;
-					varline.currentVal=varKeys[k].val;
-					return;
-				}
-				else if (time < varKeys[k].time)
-				{
-					if(k>0)
-					{
-						firstVarFrame=k-1;
-						secondVarFrame=k;
-					}
-					else if(anim.looping==="true")
-					{
-						firstVarFrame=varKeys.length-1;
-						secondVarFrame=0;
-					}
-					else
-					{
-						return;
-					}
-					if(firstVarFrame>-1)
-					{
-						firstKey=varKeys[firstVarFrame];
-						var secondKey=varKeys[secondVarFrame];
-						firstTime=firstKey.time;
-						secondTime=secondKey.time;
-						firstVal=firstKey.val;
-						secondVal=secondKey.val;
-						break;
-					}
-				}
-				else if (k==varKeys.length-1)
-				{
-					if(anim.looping==="true")
-					{
-						firstVarFrame=k;
-						secondVarFrame=0;
-						firstKey=varKeys[firstVarFrame];
-						var secondKey=varKeys[secondVarFrame];
-						firstTime=firstKey.time;
-						secondTime=secondKey.time;
-						firstVal=firstKey.val;
-						secondVal=secondKey.val;
-					}
-					else
-					{
-						varline.lastTagIndex=k;
-						varline.currentVal=varKeys[k].val;
-						return;
-					}
-				}
-			}
-		}
-		else
-		{
-			varline.lastTagIndex=0;
-			varline.currentVal=varKeys[0].val;
-			return;
-		}
-		varline.lastTagIndex=firstVarFrame;
-		if(type==="string")
-		{
-			varline.currentVal=firstVal;
-			return;
-		}
-		if(firstTime>time)
-		{
-			firstTime-=anim.length;
-		}
-		if(secondTime<time)
-		{
-			secondTime+=anim.length;
-		}
-		var t=getT(firstTime,secondTime,time);
-		varline.currentVal=cr.lerp(firstVal,secondVal,trueT(firstKey,t));
-		if(type==="int")
-		{
-			varline.currentVal=Math.floor(varline.currentVal);
-		}
-	}
-	instanceProto.animateTag = function(tagline,animLength,anim)
-	{
-		var tagKeys=tagline.keys;
-		var curTagFrame=tagKeys.length;
-		var secondTime=animLength;
-		var curTagKey=tagKeys[0];
-		if(curTagKey&&curTagKey.time>this.currentAdjustedTime&&anim.looping=="true")
-		{
-			curTagKey=tagKeys[tagKeys.length-1];
-		}
-		var curTags=[];
-		for (var k=1;k<tagKeys.length;k++)
-		{
-			if (this.currentAdjustedTime < tagKeys[k].time)
-			{
-				secondTime=tagKeys[k].time;
-				curTagFrame = k - 1;
-				curTagKey=tagKeys[curTagFrame];
-				break;
-			}
-		}
-		if(curTagKey)
-		{
-			curTags=curTagKey.tags;
-		}
-		tagline.lastTagIndex=curTagFrame;
-		tagline.currentTags=curTags;
-	}
-	instanceProto.draw = function (ctx)
-	{
-		if(!this.drawSelf)
-		{
-			return;
-		}
-		ctx.globalAlpha = this.opacity;
-		var cur_frame = this.type.animations[0].frames[0];
-		var spritesheeted = cur_frame.spritesheeted;
-		var cur_image = cur_frame.texture_img;
-		var myx = this.x;
-		var myy = this.y;
-		var w = this.width;
-		var h = this.height;
-		var widthfactor = w > 0 ? 1 : -1;
-		var heightfactor = h > 0 ? 1 : -1;
-		var mirror_factor = (this.xFlip == 1 ? -1 : 1);
-		var flip_factor = (this.yFlip == 1 ? -1 : 1);
-		var object = null;
-		var animation = (typeof animation !== 'undefined') ? animation : this.currentAnimation;
-		var cur_frame = animation.cur_frame;
-		if(this.currentAnimation)
-		{
-			var key = this.currentAnimation.mainlineKeys[this.currentAnimation.cur_frame];
-			if(key)
-			{
-				for(var i = 0; i < key.objects.length; i++)
-				{
-					object = key.objects[i];
-					if (object.type == "reference")
-					{
-						var refTimeline = animation.timelines[object.timeline];
-						var objState = refTimeline.currentObjectState;
-						if(objState&&typeof objState.frame !== 'undefined'&&objState.frame>-1)
-						{
-							var obj=refTimeline.object;
-							if(obj)
-							{
-								var atlasInfo=obj.imageSizes[objState.frame];
-								var angle = objState.angle;
-								var drawx = 0;
-								var drawy = 0;
-								ctx.save();
-								ctx.translate(objState.x,objState.y);
-								if (widthfactor !== 1 || heightfactor !== 1)
-								{
-									ctx.scale(widthfactor, heightfactor);
-								}
-								if (mirror_factor !== 1 || flip_factor !== 1)
-								{
-									ctx.scale(mirror_factor, flip_factor);
-								}
-								var absPivotX=objState.pivotX*atlasInfo.w;
-								drawx = atlasInfo.atlasXOff-absPivotX;
-								if(atlasInfo.atlasRotated)
-								{
-									var reverseAbsPivotY=(1.0-objState.pivotY)*atlasInfo.h;
-									var reverseXOff=atlasInfo.h-(atlasInfo.atlasYOff+atlasInfo.atlasH);
-									angle-=cr.to_radians(90);
-									drawy=reverseXOff-reverseAbsPivotY;
-								}
-								else
-								{
-									var absPivotY=objState.pivotY*atlasInfo.h;
-									drawy = atlasInfo.atlasYOff-absPivotY;
-								}
-								drawx*=objState.xScale;
-								drawy*=objState.yScale;
-								if(mirror_factor*flip_factor==-1)
-								{
-									if(atlasInfo.atlasRotated)
-									{
-										angle-=cr.to_radians(180);
-									}
-									angle*=-1;
-								}
-								ctx.rotate(angle * widthfactor * heightfactor);
-								if(atlasInfo.atlasRotated)
-								{
-									ctx.drawImage(cur_image,
-									atlasInfo.atlasX,
-									atlasInfo.atlasY,
-									atlasInfo.atlasH,
-									atlasInfo.atlasW,
-									drawy,drawx,
-									atlasInfo.atlasH*this.scaleRatio,
-									atlasInfo.atlasW*this.scaleRatio);
-								}
-								else
-								{
-									ctx.drawImage(cur_image,
-									atlasInfo.atlasX,
-									atlasInfo.atlasY,
-									atlasInfo.atlasW,
-									atlasInfo.atlasH,
-									drawx,drawy,
-									atlasInfo.atlasW*this.scaleRatio,
-									atlasInfo.atlasH*this.scaleRatio);
-								}
-								ctx.restore();
-							}
-						}
-					}
-				}
-			}
-		}
-	};
-	instanceProto.drawGL = function(glw)
-	{
-		if(!this.drawSelf)
-		{
-			return;
-		}
-		glw.setOpacity(this.opacity);
-		var cur_frame = this.type.animations[0].frames[0];
-		var cur_image = cur_frame.texture_img;
-		var webGL_texture = this.runtime.glwrap.loadTexture(cur_image, false, this.runtime.linearSampling, cur_frame.pixelformat);
-		glw.setTexture(webGL_texture);
-		var mirror_factor = (this.xFlip == 1 ? -1 : 1);
-		var flip_factor = (this.yFlip == 1 ? -1 : 1);
-		var object = null;
-		var uv = {};
-		uv.left = 0;
-		uv.top = 0;
-		uv.right = 1;
-		uv.bottom = 1;
-		var animation=this.currentAnimation;
-		if(animation)
-		{
-			var key = animation.mainlineKeys[animation.cur_frame];
-			if(key)
-			{
-				for(var i = 0; i < key.objects.length; i++)
-				{
-					object = key.objects[i];
-					if (object.type == "reference")
-					{
-						var refTimeline = animation.timelines[object.timeline];
-						var objState = refTimeline.currentObjectState;
-						if(objState&&typeof objState.frame !== 'undefined'&&objState.frame>-1)
-						{
-							var obj=refTimeline.object;
-							if(obj)
-							{
-								var atlasInfo=obj.imageSizes[objState.frame];
-								var angle = objState.angle;
-								if(mirror_factor*flip_factor==-1)
-								{
-									angle-=cr.to_radians(180);
-									if(!atlasInfo.atlasRotated)
-									{
-										angle*=-1;
-										angle=cr.to_radians(180)-angle;
-									}
-								}
-								uv.left = (atlasInfo.atlasX)/cur_image.width;
-								uv.top = (atlasInfo.atlasY)/cur_image.height;
-								var w=0;
-								var h=0;
-								if(atlasInfo.atlasRotated)
-								{
-									angle-=cr.to_radians(90);
-									w+=atlasInfo.atlasH;
-									h+=atlasInfo.atlasW;
-								}
-								else
-								{
-									w+=atlasInfo.atlasW;
-									h+=atlasInfo.atlasH;
-								}
-								uv.right = ((atlasInfo.atlasX)+w)/cur_image.width;
-								uv.bottom = ((atlasInfo.atlasY)+h)/cur_image.height;
-								if(mirror_factor==-1)
-								{
-									var temp=uv.left;
-									uv.left=uv.right;
-									uv.right=temp;
-								}
-								if(flip_factor==-1)
-								{
-									var temp=uv.top;
-									uv.top=uv.bottom;
-									uv.bottom=temp;
-								}
-								var cur_frame = this.curFrame;
-								var bbox = new cr.rect(0, 0, 0, 0);
-								var bquad = new cr.quad();
-								var absPivotX=(objState.pivotX*atlasInfo.w)*objState.xScale;
-								var xOff=objState.xScale*atlasInfo.atlasXOff;
-								var absPivotY=(objState.pivotY*atlasInfo.h)*objState.yScale;
-								var yOff=objState.yScale*atlasInfo.atlasYOff;
-								var reverseAbsPivotX=((1.0-objState.pivotX)*atlasInfo.w)*objState.xScale;
-								var reverseXOff=objState.xScale*(atlasInfo.w-(atlasInfo.atlasXOff+atlasInfo.atlasW));
-								var reverseAbsPivotY=((1.0-objState.pivotY)*atlasInfo.h)*objState.yScale;
-								var reverseYOff=objState.yScale*(atlasInfo.h-(atlasInfo.atlasYOff+atlasInfo.atlasH));
-								var offsetX=0;
-								var offsetY=0;
-								if(atlasInfo.atlasRotated)
-								{
-									bbox.set(objState.x,objState.y,objState.x+(atlasInfo.atlasH*objState.yScale),objState.y+(atlasInfo.atlasW*objState.xScale));
-									if(mirror_factor==-1)
-									{
-										offsetX=yOff-absPivotY;
-									}
-									else
-									{
-										offsetX=reverseYOff-reverseAbsPivotY;
-									}
-									if(flip_factor==-1)
-									{
-										offsetY=reverseXOff-reverseAbsPivotX;
-									}
-									else
-									{
-										offsetY=xOff-absPivotX;
-									}
-								}
-								else
-								{
-									bbox.set(objState.x,objState.y,objState.x+(atlasInfo.atlasW*objState.xScale),objState.y+(atlasInfo.atlasH*objState.yScale));
-									if(mirror_factor==-1)
-									{
-										offsetX=reverseXOff-reverseAbsPivotX;
-									}
-									else
-									{
-										offsetX=xOff-absPivotX;
-									}
-									if(flip_factor==-1)
-									{
-										offsetY=reverseYOff-reverseAbsPivotY;
-									}
-									else
-									{
-										offsetY=yOff-absPivotY;
-									}
-								}
-								bbox.offset(offsetX,offsetY);
-								bbox.offset(-objState.x, -objState.y);       			// translate to origin
-								bquad.set_from_rotated_rect(bbox, angle);	// rotate around origin
-								bquad.offset(objState.x, objState.y);      				// translate back to original position
-								bquad.bounding_box(bbox);
-								bbox.normalize();
-								var q = bquad;
-								glw.setOpacity(this.opacity*objState.a);
-								glw.quadTex(q.tlx, q.tly, q.trx, q.try_, q.brx, q.bry, q.blx, q.bly, uv);
-							}
-						}
-					}
-				}
-			}
-		}
-	};
-	instanceProto.playSound = function(soundLine,name)
-	{
-		this.soundToTrigger=name;
-		this.soundLineToTrigger=soundLine;
-		this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.OnSoundTriggered, this);
-	}
-	instanceProto.playEvent = function(eventLine,name)
-	{
-			this.eventToTrigger=name;
-			this.eventLineToTrigger=eventLine;
-			this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.OnEventTriggered, this);
-	}
-	instanceProto.changeVolume = function(soundLine,newVolume)
-	{
-		if(soundLine.currentObjectState.volume!=newVolume)
-		{
-			soundLine.currentObjectState.volume=newVolume;
-			this.soundToTrigger="";
-		this.soundLineToTrigger=soundLine;
-			this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.OnSoundVolumeChangeTriggered, this);
-		}
-	}
-	instanceProto.changePanning = function(soundLine,newPanning)
-	{
-		if(soundLine.currentObjectState.panning!=newPanning)
-		{
-			soundLine.currentObjectState.panning=newPanning;
-			this.soundToTrigger="";
-		this.soundLineToTrigger=soundLine;
-			this.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.OnSoundPanningChangeTriggered, this);
-		}
-	}
-	function findObjectItemInArray(name, objectArray, entityName)
-	{
-		for (var o = 0; o < objectArray.length; o++)
-		{
-			var obj=objectArray[o];
-			if (obj&&(obj.name===name||(obj.entityName===entityName&&obj.originalName===name)))
-			{
-			return o;
-			}
-		}
-		return -1;
-	}
-	function objectFromArray(name, objectArray, entityName)
-	{
-		for (var o = 0; o < objectArray.length; o++)
-		{
-			var obj=objectArray[o];
-			if (obj&&(obj.name===name||(obj.entityName===entityName&&obj.originalName===name)))
-			{
-				return obj;
-			}
-		}
-	}
-	function SpriterObjectArrayItem(spritername, name, entityName, originalName, varDefs)
-	{
-		this.name = name;
-		this.fullTypeName = spritername + "_" + name;
-		this.spriterType = "sprite";
-		this.frames = [];
-		this.pivots = [];
-		this.imageSizes = [];
-		this.atlasInfos = [];
-		this.charMaps = [];
-		this.width = 0;
-		this.height = 0;
-		this.entityName = entityName;
-		this.originalName = originalName;
-		this.varDefs = varDefs;
-	}
-	instanceProto.timelineFromName = function(name,anim)
-	{
-		anim = typeof anim !== 'undefined' ? anim : this.currentAnimation;
-		if(anim)
-		{
-			for(var t=0;t<anim.timelines.length;t++)
-			{
-				var timeline=anim.timelines[t];
-				if(timeline&&timeline.name===name)
-				{
-					return timeline;
-				}
-			}
-			for(var t=0;t<anim.soundlines.length;t++)
-			{
-				var timeline=anim.soundlines[t];
-				if(timeline&&timeline.name===name)
-				{
-					return timeline;
-				}
-			}
-			for(var t=0;t<anim.eventlines.length;t++)
-			{
-				var timeline=anim.eventlines[t];
-				if(timeline&&timeline.name===name)
-				{
-					return timeline;
-				}
-			}
-		}
-	}
-	instanceProto.tagStatus = function(tagname,meta)
-	{
-		if(meta)
-		{
-			for(var t=0;t<meta.tagline.currentTags.length;t++)
-			{
-				var tag=meta.tagline.currentTags[t];
-				if(tag)
-				{
-					if(tag==tagname)
-					{
-						return true;
-					}
-				}
-			}
-		}
-		return false;
-	}
-	instanceProto.varStatus = function(ret,varname,meta)
-	{
-		if(meta)
-		{
-			for(var v=0;v<meta.varlines.length;v++)
-			{
-				var varline=meta.varlines[v];
-				if(varline)
-				{
-					if(varline.def.name==varname)
-					{
-						if(varline.def.type==="string")
-						{
-							ret.set_string(varline.currentVal);
-						}
-						else if(varline.def.type==="int")
-						{
-							ret.set_int(varline.currentVal);
-						}
-						else
-						{
-							ret.set_float(varline.currentVal);
-						}
-						return;
-					}
-				}
-			}
-		}
-		ret.set_float(0);
-	}
-	instanceProto.loadTagDefs = function(json)
-	{
-		if(json)
-		{
-			var tags = json["tag_list"];
-			if(tags)
-			{
-				for (var t=0;t<tags.length;t++)
-				{
-					var tagDef=tags[t];
-					this.tagDefs.push(tagDef["name"]);
-				}
-			}
-		}
-	}
-	instanceProto.loadVarDefs = function(json, varDefs)
-	{
-		if(json)
-		{
-			for (var d=0;d<json.length;d++)
-			{
-				var defJson=json[d];
-				if(defJson)
-				{
-					var newVarDef=new VarDef();
-					newVarDef.name=defJson.name;
-					newVarDef.type=defJson.type;
-					newVarDef.def=defJson["default"];
-					varDefs.push(newVarDef);
-				}
-			}
-		}
-	}
-	instanceProto.findSprites = function(xml) //XMLDocument object, name of entityToLoad
-	{
-		if(!xml)
-		{
-			return;
-		}
-		var thisTypeName = this.type.name;
-		var att;
-		var json = xml;//.spriter_data")[0];
-		var folderTags = json["folder"];
-		for (var d=0;d<folderTags.length;d++)
-		{
-			var folderTag=folderTags[d];
-			this.folders.push(new SpriterFolder());
-			var fileTags = folderTag["file"];
-			for (var f=0;f<fileTags.length;f++)
-			{
-				var fileTag=fileTags[f];
-				att=fileTag;
-				var spriterFile=new SpriterFile();
-				spriterFile.fileName=att["name"];
-				if(fileTag.hasOwnProperty("pivot_x"))
-				{
-					spriterFile.pivotX = (att["pivot_x"]);
-				}
-				if(fileTag.hasOwnProperty("pivot_y"))
-				{
-					spriterFile.pivotY = 1.0-(att["pivot_y"]);
-				}
-				if(fileTag.hasOwnProperty("width"))
-				{
-					spriterFile.w = (att["width"]);
-				}
-				if(fileTag.hasOwnProperty("height"))
-				{
-					spriterFile.h = (att["height"]);
-				}
-				if(this.drawSelf)
-				{
-					if(fileTag.hasOwnProperty("ax"))
-					{
-						spriterFile.atlasX = (att["ax"]);
-					}
-					if(fileTag.hasOwnProperty("ay"))
-					{
-						spriterFile.atlasY = (att["ay"]);
-					}
-					if(fileTag.hasOwnProperty("axoff"))
-					{
-						spriterFile.atlasXOff = (att["axoff"]);
-					}
-					if(fileTag.hasOwnProperty("ayoff"))
-					{
-						spriterFile.atlasYOff = (att["ayoff"]);
-					}
-					if(fileTag.hasOwnProperty("aw"))
-					{
-						spriterFile.atlasW = (att["aw"]);
-					}
-					if(fileTag.hasOwnProperty("ah"))
-					{
-						spriterFile.atlasH = (att["ah"]);
-					}
-					if(fileTag.hasOwnProperty("arot"))
-					{
-						spriterFile.atlasRotated = (att["arot"])=="true"?true:false;
-					}
-				}
-				this.folders[d].files.push(spriterFile);
-			}
-		}
-		var objectArray=[];
-		var NO_INDEX=-1;
-		var entityTags = json["entity"];
-		for (var e = 0; e < entityTags.length; e++)
-		{
-			var entityTag=entityTags[e];
-			att = entityTag;
-			var objInfoTags = entityTag["obj_info"];
-			var charMapTags = entityTag["character_map"];
-			var entityName=att.name;
-			if(objInfoTags)
-			{
-				for (var o = 0; o < objInfoTags.length; o++)
-				{
-					var infoTag = objInfoTags[o];
-					if(infoTag)
-					{
-						var objInfo=new ObjInfo();
-						objInfo.name=infoTag["realname"];
-						if(!objInfo.name)
-						{
-							objInfo.name=infoTag["name"];
-						}
-						this.loadVarDefs(infoTag["var_defs"],objInfo.varDefs);
-						this.boneWidthArray[objInfo.name]=infoTag["w"];
-						this.objInfoVarDefs.push(objInfo);
-					}
-					if(infoTag&&(infoTag["type"]==="sprite"||infoTag["type"]==="box"||infoTag["type"]==="entity"))
-					{
-						var typeName=infoTag["name"];
-						var originalName=infoTag["realname"];
-						var varDefs=[];
-						if(infoTag["var_defs"])
-						{
-							this.loadVarDefs(infoTag["var_defs"],varDefs);
-						}
-						objectArray.push(new SpriterObjectArrayItem(thisTypeName, typeName,entityName,originalName,varDefs));
-						var lastObj=objectArray[objectArray.length-1];
-						if(infoTag["type"]==="box")
-						{
-							lastObj.width=infoTag["w"];
-							lastObj.height=infoTag["h"];
-							lastObj.isBox=true;
-							lastObj.spriterType="box";
-							var imageSize={};
-										imageSize.w=lastObj.width;
-										imageSize.h=lastObj.height;
-							lastObj.imageSizes.push(imageSize);
-						}
-						if(infoTag["type"]==="entity")
-						{
-							lastObj.spriterType="entity";
-						}
-						else if(infoTag["type"]==="sprite")
-						{
-							var frames=infoTag["frames"];
-							if(frames)
-							{
-								for (var f = 0; f < frames.length; f++)
-								{
-									var frame = frames[f];
-									if(this.folders[frame["folder"]]&&this.folders[frame["folder"]].files[frame["file"]])
-									{
-										lastObj.frames.push(this.folders[frame["folder"]].files[frame["file"]].fileName);
-										var pivot={};
-										pivot.x=0;
-										pivot.y=0;
-										pivot.x=this.folders[frame["folder"]].files[frame["file"]].pivotX;
-										pivot.y=this.folders[frame["folder"]].files[frame["file"]].pivotY;
-										lastObj.pivots.push(pivot);
-										var imageSize={};
-										imageSize.w=1;
-										imageSize.h=1;
-										var currentFile=this.folders[frame["folder"]].files[frame["file"]];
-										imageSize.w=currentFile.w;
-										imageSize.h=currentFile.h;
-										if(this.drawSelf)
-										{
-											imageSize.fileName=currentFile.fileName;
-											imageSize.atlasW=currentFile.atlasW;
-											imageSize.atlasH=currentFile.atlasH;
-											imageSize.atlasX=currentFile.atlasX;
-											imageSize.atlasY=currentFile.atlasY;
-											imageSize.atlasXOff=currentFile.atlasXOff;
-											imageSize.atlasYOff=currentFile.atlasYOff;
-											imageSize.atlasRotated=currentFile.atlasRotated;
-										}
-										lastObj.imageSizes.push(imageSize);
-									}
-								}
-							}
-							if(charMapTags)
-							{
-								for (var c = 0; c < charMapTags.length; c++)
-								{
-									var charMapTag = charMapTags[c];
-									var mapTags = charMapTag["map"];
-									if(mapTags)
-									{
-										for (var m = 0; m < mapTags.length; m++)
-										{
-											var mapTag = mapTags[m];
-											if(typeof mapTag["folder"]!=="undefined"&&typeof mapTag["file"]!=="undefined")
-											{
-												if(this.folders[mapTag["folder"]]&&this.folders[mapTag["folder"]].files[mapTag["file"]])
-												{
-													var charMap={};
-													charMap.oldFrame=lastObj.frames.indexOf(this.folders[mapTag["folder"]].files[mapTag["file"]].fileName);
-													if(charMap.oldFrame>-1)
-													{
-														charMap.newFrame=-1;
-														if(typeof mapTag["target_folder"]!=="undefined"&&typeof mapTag["target_file"]!=="undefined")
-														{
-charMap.newFrame=lastObj.frames.indexOf(this.folders[mapTag["target_folder"]].files[mapTag["target_file"]].fileName
-);
-														}
-														if(!lastObj.charMaps[charMapTag["name"]])
-														{
-															lastObj.charMaps[charMapTag["name"]]=[];
-														}
-														lastObj.charMaps[charMapTag["name"]].push(charMap);
-													}
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		return objectArray;
-	};
-	instanceProto.generateTestC2ObjectArray = function(objectArray)
-	{
-		var c2Objects=[];
-		var types=this.runtime.types;
-		for(var o = 0,len = objectArray.length; o<len;o++)
-		{
-			var c2Object={};
-			c2Object.type=types[objectArray[o].fullTypeName];
-			c2Object.spriterType=objectArray[o].spriterType;
-			c2Object.inst=null;
-			c2Object.appliedMap=[];
-			c2Object.obj=objectArray[o];
-			c2Objects.push(c2Object);
-		}
-		return c2Objects;
-	};
-	instanceProto.cloneSound = function(other)
-	{
-		var sound = new SpriterSound();
-		sound.trigger = other.trigger;
-		sound.volume = other.volume;
-		sound.panning = other.panning;
-		sound.name = other.name;
-		return sound;
-	};
-	instanceProto.cloneObject = function(other)
-	{
-		var folderIndex=-null;
-		var fileIndex=null;
-		var fileName=null;
-		var NO_INDEX=-1;
-		var object = new SpriterObject();
-		object.type=other.type;
-		object.frame=other.frame;
-		object.storedFrame=other.storedFrame;
-		object.x = (other.x);
-		object.y = -(other.y);
-		object.angle = ((other.angle));
-		object.a = ((other.a));
-		object.angle=other.angle;
-		object.xScale = (other.xScale);
-		object.yScale = (other.yScale);
-		object.pivotX = (other.pivotX);
-		object.pivotY = (other.pivotY);
-		object.entity = other.entity;
-		object.animation = other.animation;
-		object.t = other.t;
-		object.defaultPivot = other.defaultPivot;
-		return object;
-	};
-	instanceProto.objectFromTag = function(objectTag,objectArray,timelineName,object_type,entityName)
-	{
-		var att=objectTag;
-		var folderIndex=-null;
-		var fileIndex=null;
-		var fileName=null;
-		var NO_INDEX=-1;
-		var object = new SpriterObject();
-		object.type=object_type;
-		if(object_type==="sprite")
-		{
-			folderIndex=att["folder"];
-			fileIndex=att["file"];
-			file=this.folders[folderIndex].files[fileIndex];
-			var objectItem=objectArray[findObjectItemInArray(timelineName,objectArray,entityName)];
-			object.frame=objectItem.frames.indexOf(file.fileName);
-			object.storedFrame=object.frame;
-		}
-		if(objectTag.hasOwnProperty("x"))
-		{
-			object.x = (att["x"]);
-		}
-		if(objectTag.hasOwnProperty("y"))
-		{
-			object.y = -(att["y"]);
-		}
-		if(objectTag.hasOwnProperty("angle"))
-		{
-			object.angle = ((att["angle"]));
-		}
-		if(objectTag.hasOwnProperty("a"))
-		{
-			object.a = ((att["a"]));
-		}
-		object.angle=360-object.angle;
-		object.angle/=360;
-		if(object.angle>0.5)
-		{
-		object.angle-=1;
-		}
-		object.angle*=3.141592653589793*2;
-		if(objectTag.hasOwnProperty("scale_x"))
-		{
-			object.xScale = (att["scale_x"]);
-		}
-		if(objectTag.hasOwnProperty("scale_y"))
-		{
-			object.yScale = (att["scale_y"]);
-		}
-		if(objectTag.hasOwnProperty("entity"))
-		{
-			object.entity = (att["entity"]);
-		}
-		if(objectTag.hasOwnProperty("animation"))
-		{
-			object.animation = (att["animation"]);
-		}
-		if(objectTag.hasOwnProperty("t"))
-		{
-			object.t = (att["t"]);
-		}
-		if(objectTag.hasOwnProperty("pivot_x"))
-		{
-			object.pivotX = (att["pivot_x"]);
-		}
-		else if(object_type==="sprite")
-		{
-			var folders=this.folders;
-			var folder=folders[folderIndex];
-			object.defaultPivot=true;
-			if(folder)
-			{
-				var file=folder.files[fileIndex];
-				if(file)
-				{
-					object.pivotX=file.pivotX;
-				}
-			}
-		}
-		if(objectTag.hasOwnProperty("pivot_y"))
-		{
-			object.pivotY = 1-(att["pivot_y"]);
-		}
-		else if(object_type==="sprite")
-		{
-			var folders=this.folders;
-			var folder=folders[folderIndex];
-			object.defaultPivot=true;
-			if(folder)
-			{
-				var file=folder.files[fileIndex];
-				if(file)
-				{
-					object.pivotY=file.pivotY;
-				}
-			}
-		}
-		return object;
-	};
-	instanceProto.soundFromTag = function(soundTag)
-	{
-		var sound = new SpriterSound();
-		if(soundTag["folder"]!==undefined&&soundTag["file"]!==undefined)
-		{
-			var file=this.folders[soundTag["folder"]].files[soundTag["file"]];
-			if(file)
-			{
-				sound.name=file.fileName;
-				sound.name=sound.name.substr(0,sound.name.lastIndexOf("."));
-				sound.name=sound.name.substr(sound.name.lastIndexOf("/")+1,sound.name.length);
-			}
-		}
-		if(soundTag.hasOwnProperty("trigger"))
-		{
-			sound.trigger=soundTag["trigger"];
-		}
-		if(soundTag.hasOwnProperty("panning"))
-		{
-			sound.panning = soundTag["panning"];
-		}
-		if(soundTag.hasOwnProperty("volume"))
-		{
-			sound.volume = soundTag["volume"];
-		}
-		return sound;
-	};
-	instanceProto.initDOMtoPairedObjects = function()
-	{
-		var entities=this.entities;
-		for(var e=0;e<entities.length;e++)
-		{
-			var entity=entities[e];
-			if(entity)
-			{
-				var animations=entity.animations;
-				if(animations)
-				{
-					for(var a=0;a<animations.length;a++)
-					{
-						var animation=animations[a];
-						if(animation)
-						{
-							var timelines=animation.timelines;
-							if(timelines)
-							{
-								for(var t=0;t<timelines.length;t++)
-								{
-									var timeline=timelines[t];
-									if(timeline)
-									{
-										timeline.c2Object=this.c2ObjectArray[findObjectItemInArray(timeline.name,this.objectArray,entity.name)];
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	};
-	instanceProto.associateAllTypes = function ()
-	{
-		var c2ObjectArray=this.c2ObjectArray;
-		var objectArray=this.objectArray;
-		for(var o = 0,len = objectArray.length;o<len;o++)
-		{
-			var obj=objectArray[o];
-			var siblings=this.siblings;
-			if(siblings&&siblings.length>0)
-			{
-				for(var s=0;s<siblings.length;s++)
-				{
-					var sibling=siblings[s];
-					if(sibling)
-					{
-						var type=sibling.type;
-						if(type.name===obj.fullTypeName)
-						{
-							var c2Object=c2ObjectArray[o];
-							c2Object.type=type;
-							var paired_inst = sibling;
-							c2Object.inst=paired_inst;
-							var animations=this.entity.animations;
-							var name=obj.name;
-							for(var a=0;a<animations.length;a++)
-							{
-								var animation=animations[a];
-								var timelines=animation.timelines;
-								for(var t=0;t<timelines.length;t++)
-								{
-									var timeline=timelines[t];
-									if(name==timeline.name)
-									{
-										timeline.c2Object=c2Object;
-									}
-								}
-							}
-							break;
-						}
-					}
-				}
-			}
-			else
-			{
-				var obj=objectArray[o];
-				var c2Object=c2ObjectArray[o];
-				var type=c2Object.type;
-				if(type)
-				{
-					obj.fullTypeName=type.name;
-					c2Object.type=type;
-					var iid = this.get_iid(); // get my IID
-					var paired_inst = type.instances[iid];
-					c2Object.inst=paired_inst;
-					var animations=this.entity.animations;
-				}
-				break;
-			}
-		}
-	};
-	instanceProto.loadSCML = function (json_)
-	{
-		this.loadTagDefs(json_);
-		this.objectArray=this.findSprites(json_);
-		if(!this.type.objectArrays[this.properties[0]])
-		{
-			this.type.objectArrays[this.properties[0]]=this.objectArray;
-			this.type.boneWidthArrays[this.properties[0]]=this.boneWidthArray;
-		}
-		this.c2ObjectArray=this.generateTestC2ObjectArray(this.objectArray);
-		var thisTypeName=this.type.name;
-		var att;
-		var json=json_;
-		var folderTags = json["folder"];
-		var NO_INDEX=-1;
-		var entityTags = json["entity"];
-		for (var e = 0; e < entityTags.length; e++)
-		{
-			var entityTag=entityTags[e];
-			att=entityTag;
-			var entity = new SpriterEntity();
-			att=entityTag;
-			entity.name=att["name"];
-			this.loadVarDefs(entityTag["var_defs"],entity.varDefs);
-			var animationTags = entityTag["animation"];
-			for (var a = 0; a < animationTags.length; a++)
-			{
-				var animationTag = animationTags[a];
-				att=animationTag;
-				var animation = new SpriterAnimation();
-				animation.name=att["name"];
-				animation.length=att["length"];
-				if(animationTag.hasOwnProperty("looping"))
-				{
-					animation.looping = att["looping"];
-				}
-				if(animationTag.hasOwnProperty("loop_to"))
-				{
-					animation.loopTo = att["loop_to"];
-				}
-				if(animationTag.hasOwnProperty("l"))
-				{
-					animation.l = att["l"];
-				}
-				if(animationTag.hasOwnProperty("r"))
-				{
-					animation.r = att["r"];
-				}
-				if(animationTag.hasOwnProperty("t"))
-				{
-					animation.t = att["t"];
-				}
-				if(animationTag.hasOwnProperty("b"))
-				{
-					animation.b = att["b"];
-				}
-				var mainlineTag = animationTag["mainline"];
-				var mainline = new SpriterTimeline();
-				var keyTags = mainlineTag["key"];
-				for (var k = 0; k<keyTags.length; k++)
-				{
-					var keyTag = keyTags[k];
-					var key = new SpriterKey();
-					att=keyTag;
-					setTimeInfoFromJson(keyTag,key);
-					var boneRefTags = keyTag["bone_ref"];
-					if(boneRefTags)
-					{
-						for (var o = 0; o < boneRefTags.length; o++)
-						{
-							var boneRefTag=boneRefTags[o];
-							att=boneRefTag;
-							var boneRef = new SpriterObjectRef();
-							boneRef.timeline=att["timeline"];
-							boneRef.key=att["key"];
-							if(boneRefTag.hasOwnProperty("parent"))
-							{
-								boneRef.parent = att["parent"];
-							}
-							key.bones.push(boneRef);
-						}
-					}
-					var objectRefTags = keyTag["object_ref"];
-					if(objectRefTags)
-					{
-						for (var o = 0; o < objectRefTags.length; o++)
-						{
-							var objectRefTag=objectRefTags[o];
-							att=objectRefTag;
-							var objectRef = new SpriterObjectRef();
-							objectRef.timeline=att["timeline"];
-							objectRef.key=att["key"];
-							if(objectRefTag.hasOwnProperty("parent"))
-							{
-								objectRef.parent = att["parent"];
-							}
-							key.objects.push(objectRef);
-						}
-					}
-					animation.mainlineKeys.push(key);
-				}
-				animation.mainline=mainline;
-				var timelineTags = animationTag["timeline"];
-				this.setTimelinesFromJson(timelineTags,animation.timelines,entity);
-				timelineTags = animationTag["soundline"];
-				this.setSoundlinesFromJson(timelineTags,animation.soundlines,entity.name);
-				timelineTags = animationTag["eventline"];
-				this.setEventlinesFromJson(timelineTags,animation.eventlines,entity.name);
-				timelineTags = animationTag["meta"];
-				this.setMetaDataFromJson(timelineTags,animation.meta,entity.varDefs);
-				entity.animations.push(animation);
-			}
-			this.entities.push(entity);
-			if(!this.entity||this.properties[1]===entity.name)
-			{
-				this.entity=entity;
-			}
-		}
-	};
-	instanceProto.setAnimToIndex = function(animIndex)
-	{
-		if(this.entity&&this.entity.animations.length>animIndex)
-		{
-			this.playTo=-1;
-			this.changeAnimTo=this.entity.animations[animIndex];
-			this.changeToStartFrom=2;
-			var anim=this.currentAnimation;
-			if(anim)
-			{
-				this.animPlaying=true;
-			}
-			this.runtime.tick2Me(this);
-		}
-	}
-	instanceProto.setAnim = function (animName,startFrom,blendDuration)
-	{
-		var ratio=0;
-		if((startFrom==1||startFrom==2)&&this.currentAnimation&&animName==this.currentAnimation.name)
-		{
-			return;
-		}
-		if(startFrom>PLAYFROMCURRENTTIMERATIO&&blendDuration>0)
-		{
-			var secondAnim=this.getAnimFromEntity(animName);
-			if(secondAnim===this.secondAnimation&&this.blendEndTime>0)
-			{
-				return;
-			}
-			if(secondAnim===this.currentAnimation)
-			{
-				if(!this.secondAnimation)
-				{
-					this.blendStartTime=0;
-					this.blendEndTime=0;
-					this.blendPoseTime=0;
-					this.secondAnimation=null;
-					this.animBlend=0;
-					this.changeAnimTo=null;
-					return;
-				}
-				else
-				{
-					this.currentAnimation=this.secondAnimation;
-					this.animBlend=1.0-this.animBlend;
-				}
-			}
-			else
-			{
-				this.animBlend=0;
-			}
-			this.secondAnimation=secondAnim;
-			this.blendStartTime=this.getNowTime();
-			this.blendPoseTime=0;
-			if(startFrom===BLENDTOSTART&&this.currentAnimation.looping==="false")
-			{
-			}
-			this.blendEndTime=this.blendStartTime+((blendDuration/1000)/(this.ignoreGlobalTimeScale?1:this.runtime.timescale));
-		}
-		else
-		{
-			if(blendDuration<=0)
-			{
-				if(startFrom===BLENDATCURRENTTIMERATIO)
-				{
-					startFrom=2;
-				}
-				else if(startFrom==BLENDTOSTART)
-				{
-					startFrom=0;
-				}
-			}
-			this.blendStartTime=0;
-			this.blendEndTime=0;
-			this.blendPoseTime=0;
-			this.secondAnimation=null;
-		}
-		this.changeToStartFrom=startFrom;
-		if(startFrom===BLENDTOSTART&&this.secondAnimation)
-		{
-			this.blendPoseTime=this.currentSpriterTime;
-			this.secondAnimation.localTime=0;
-			this.setMainlineKeyByTime(this.secondAnimation);
-			var secondTweenedBones=this.currentTweenedBones(this.secondAnimation);
-			this.animateCharacter(secondTweenedBones,this.secondAnimation,false);
-		}
-		this.setAnimTo(animName,false);
-		var animPlaying=this.animPlaying;
-		this.animPlaying=false;
-		this.tick2(true);
-		this.animPlaying=animPlaying;
-	};
-	instanceProto.doRequest = function (json,url_, method_)
-	{
-		var self = this;
-		var request = null;
-		var errorFunc = function () {
-		};
-		try
-		{
-			var data = json;
-			self.loadSCML(data);
-			self.type.scmlFiles[self.properties[0]]=self.entities;
-			self.runtime.trigger(cr.plugins_.Spriter.prototype.cnds.readyForSetup, self);
-			self.setAnimTo(self.properties[2],true);
-			if(!self.currentAnimation&&self.entity&&self.entity.animations.length)
-			{
-				self.setAnimTo(self.entity.animations[0].name,true);
-			}
-			for(var i=0;i<self.type.scmlInstsToNotify[self.properties[0]].length;i++)
-			{
-				var inst=self.type.scmlInstsToNotify[self.properties[0]][i];
-				inst.forceCharacterFromPreload();
-			}
-			delete self.type.scmlReserved[self.properties[0]];
-			self.type.scmlInstsToNotify[self.properties[0]]=[];
-		}
-		catch (e)
-		{
-		}
-	};
-	instanceProto.getAnimFromEntity = function(animName)
-	{
-		if(!this.entity || !this.entity.animations)
-		{
-			return;
-		}
-		for(var a = 0,len = this.entity.animations.length;a<len;a++)
-		{
-			if(this.entity.animations[a].name==animName)
-			{
-				return this.entity.animations[a];
-			}
-		}
-	};
-	instanceProto.mapObjToObj = function(parentObject,obj,flipAngle)
-	{
-		var returnObj=new SpriterObject();
-		returnObj.xScale=obj.xScale*parentObject.xScale;
-		returnObj.yScale=obj.yScale*parentObject.yScale;
-		if(flipAngle<0)
-		{
-			returnObj.angle=((3.141592653589793*2)-obj.angle)+parentObject.angle;
-		}
-		else
-		{
-			returnObj.angle=obj.angle+parentObject.angle;
-		}
-		var x=obj.x*parentObject.xScale;
-		var y=obj.y*parentObject.yScale;
-		var angle=parentObject.angle;
-		var s = 0;
-		var c = 1;
-		if(angle!=0)
-		{
-			s=Math.sin(angle);
-			c=Math.cos(angle);
-		}
-		var xnew = (x * c) - (y * s);
-		var ynew = (x * s) + (y * c);
-		returnObj.a=parentObject.a*obj.a;
-		returnObj.pivotX=obj.pivotX;
-		returnObj.pivotY=obj.pivotY;
-		returnObj.defaultPivot=obj.defaultPivot;
-		returnObj.x=xnew+parentObject.x;
-		returnObj.y=ynew+parentObject.y;
-		returnObj.entity=obj.entity;
-		returnObj.animation=obj.animation;
-		returnObj.t=obj.t;
-		return returnObj;
-	};
-	instanceProto.instsEqual = function(obj,inst)
-	{
-		return obj.x==inst.x&&obj.y==inst.y&&obj.a==inst.opacity&&obj.angle==inst.angle;
-	};
-	instanceProto.objFromInst = function(inst)
-	{
-		var obj = new SpriterObject();
-		obj.pivotX=inst.hotspotX;
-		obj.pivotY=inst.hotspotY;
-		obj.defaultPivot=false;
-		obj.x=inst.x;
-		obj.y=inst.y;
-		obj.a=inst.opacity;
-		obj.angle=inst.angle;
-		obj.frame=inst.curFrame;
-		obj.storedFrame=inst.storedFrame;
-		return obj;
-	};
-	instanceProto.currentFrame = function()
-	{
-		if(this.currentAnimation)
-		{
-			return this.currentAnimation.cur_frame;
-		}
-		return 0;
-	}
-	instanceProto.applyPivotToInst = function(inst,pivotX,pivotY,objWidth,objHeight)
-	{
-		var x=-1*pivotX*objWidth;
-		var y=-1*pivotY*objHeight;
-		var angle=inst.angle;
-		var s = 0;
-		var c = 1;
-		if(angle!=0)
-		{
-			s = Math.sin(angle);
-			c = Math.cos(angle);
-		}
-		var xnew = (x * c) - (y * s);
-		var ynew = (x * s) + (y * c);
-		inst.x=xnew+inst.x;
-		inst.y=ynew+inst.y;
-	};
-	instanceProto.distance = function(ax,ay,bx,by)
-	{
-		return Math.sqrt(Math.pow(bx-ax,2)+Math.pow(by-ay,2));
-	}
-	instanceProto.applyIk = function(targetX, targetY, addToLength, parentBone, childBoneAbs, childBoneLocal, childBoneLength)
-	{
-		if(!parentBone||!childBoneLocal)
-		{
-			return;
-		}
-		var ikReversal=false;
-		var distanceAB = this.distance(0,0,childBoneLocal.x*parentBone.xScale,childBoneLocal.y*parentBone.yScale);
-		var distanceATarget = this.distance(parentBone.x,parentBone.y,targetX,targetY);
-		var distanceBTarget = fabs(childBoneLength*childBoneLocal.xScale*parentBone.xScale)+addToLength;
-		var parentBoneFactor=parentBone.scaleX*parentBone.scaleY<0?true:false;
-		if(distanceATarget>distanceAB+distanceBTarget)
-		{
-			 var newAngle=(cr.to_radians(270)-(Math.atan2(parentBone.x-targetX,parentBone.y-targetY)));
-			 if(parentBone.scaleX<0)
-			 {
-				 newAngle=newAngle-cr.to_radians(180);
-			 }
-			 if(this.xFlip)
-			{
-				newAngle-=cr.to_radians(180);
-			}
-			 parentBone.angle=newAngle;
-		}
-		else
-		{
-			var xDiff=parentBone.x-targetX;
-			var yDiff=parentBone.y-targetY;
-			var newAngle=Math.acos((((distanceAB*distanceAB)
-											+(distanceATarget*distanceATarget)
-											-(distanceBTarget*distanceBTarget))
-										   /(2*distanceAB*distanceATarget)));
-			var angleOffset=cr.to_radians(270)-Math.atan2(xDiff,yDiff);
-			var childAngleOffset=(cr.to_radians(270)-Math.atan2(parentBone.x-childBoneAbs.x,parentBone.y-childBoneAbs.y))-parentBone.angle;
-			if(childBoneLocal.angle>0)
-			{
-				ikReversal=true;
-			}
-			newAngle=angleOffset+(newAngle*(ikReversal?-1:1)*(parentBoneFactor?-1:1));
-			if(parentBone.scaleX<0)
-			{
-				childAngleOffset=childAngleOffset-cr.to_radians(180);
-			}
-			newAngle-=childAngleOffset;
-			if(newAngle!=newAngle)
-			{
-				newAngle=parentBone.angle;
-			}
-			else
-			{
-				if(parentBone.scaleX<0)
-				{
-					newAngle=newAngle-cr.to_radians(180);
-				}
-			}
-			parentBone.angle=newAngle;
-		}
-		childBoneAbs=this.mapObjToObj(parentBone,childBoneLocal,parentBone.xScale*parentBone.yScale);
-		var newAngle=cr.to_radians(270)-Math.atan2(childBoneAbs.x-targetX,childBoneAbs.y-targetY);
-		if(childBoneAbs.scaleX<0)
-		{
-			newAngle-=cr.to_radians(180);
-		}
-		if(this.xFlip)
-		{
-			newAngle-=cr.to_radians(180);
-		}
-		if(parentBoneFactor)
-		{
-			newAngle=cr.to_radians(360)-newAngle;
-			newAngle*=-1;
-		}
-		childBoneAbs.angle=newAngle;
-		return childBoneAbs;
-	}
-	instanceProto.applyObjToInst = function(obj,inst,dontApplyGlobalScale,c2Object)
-	{
-		var overrodeImage=false;
-		var overrideComponents=this.objectOverrides[c2Object.obj.originalName];
-		if (typeof overrideComponents !== "undefined")
-		{
-			for(var component in overrideComponents)
-			{
-				switch(component)
-				{
-					case COMPONENTANGLE:
-						obj.angle=cr.to_radians(overrideComponents[component]);
-						this.force=true;
-						break;
-					case COMPONENTX:
-						obj.x=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTY:
-						obj.y=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTSCALEX:
-						obj.xScale=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTSCALEY:
-						obj.yScale=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTIMAGE:
-						obj.frame=SetSpriteAnimFrame(inst,overrideComponents[component],c2Object);
-						overrodeImage=true;
-						this.force=true;
-						break;
-					case COMPONENTPIVOTX:
-						obj.pivotX=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTPIVOTY:
-						obj.pivotY=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTENTITY:
-						obj.entity=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTANIMATION:
-						obj.animation=overrideComponents[component];
-						this.force=true;
-						break;
-					case COMPONENTTIMERATIO:
-						obj.t=overrideComponents[component];
-						this.force=true;
-						break;
-					default:
-						break;
-				}
-			}
-		}
-		if(this.drawSelf)
-		{
-			return overrodeImage;
-		}
-		inst.angle=obj.angle;
-		inst.opacity=obj.a;
-		var cur_frame = inst.curFrame;
-		inst.hotspotX=0;
-		inst.hotspotY=0;
-		inst.x=obj.x;
-		inst.y=obj.y;
-		var trueW=inst.width;
-		var trueH=inst.height;
-		if(c2Object.obj.spriterType==="entity")
-		{
-			inst.subEntScaleX=obj.xScale;
-			inst.subEntScaleY=obj.yScale;
-			inst.setEntToIndex(obj.entity);
-			if(inst.entity)
-			{
-				inst.setAnimToIndex(obj.animation);
-				inst.setAnimTime(1,obj.t);
-			}
-		}
-		if(c2Object.obj.imageSizes&&c2Object.obj.imageSizes.length>inst.cur_frame)
-		{
-			trueW=c2Object.obj.imageSizes[inst.cur_frame].w;
-			trueH=c2Object.obj.imageSizes[inst.cur_frame].h;
-		}
-		var mirror_factor = (this.xFlip == 1 ? -1 : 1);
-		var flip_factor = (this.yFlip == 1 ? -1 : 1);
-		var new_width = (dontApplyGlobalScale?1:this.scaleRatio) * trueW * obj.xScale * mirror_factor;
-		var new_height = (dontApplyGlobalScale?1:this.scaleRatio) * trueH * obj.yScale * flip_factor;
-		if (inst.width !== new_width || inst.height !== new_height)
-		{
-			inst.width = new_width;
-			inst.height = new_height;
-		}
-		var pivX=obj.pivotX;
-		var pivY=obj.pivotY;
-		if(obj.defaultPivot)
-		{
-			var curPivot=c2Object.obj.pivots[inst.cur_frame];
-			if(!curPivot)
-			{
-				curPivot=c2Object.obj.pivots[0];
-			}
-			if(curPivot)
-			{
-				pivX=curPivot.x;
-				pivY=curPivot.y;
-			}
-		}
-		this.applyPivotToInst(inst,pivX,pivY,new_width,new_height);
-		inst.set_bbox_changed();
-		return overrodeImage;
-	};
-	instanceProto.setEntTo = function(entName)
-	{
-		var entities=this.entities;
-		for(var e = 0,len=entities.length;e<len;e++)
-		{
-			var entity=entities[e];
-			if(entity&&entName==entity.name)
-			{
-				this.entity=entity;
-			}
-		}
-		if(!this.entity&&this.entities.length)
-		{
-			this.entity=entities[0];
-		}
-		if(!this.entity)
-		{
-			this.startingEntName=entName;
-		}
-	};
-	instanceProto.setEntToIndex = function(entIndex)
-	{
-		this.entity=this.entities[entIndex];
-		if(!this.entity&&this.entities.length)
-		{
-			this.entity=this.entities[0];
-		}
-	};
-	instanceProto.setAllCollisionsAndVisibility = function(newState)
-	{
-		var c2ObjectArray=this.c2ObjectArray;
-		if(c2ObjectArray)
-		{
-			for(var o=0;o<c2ObjectArray.length;o++)
-			{
-				var c2Object=c2ObjectArray[o];
-				var inst=c2Object.inst;
-				if(!inst)
-				{
-					if(!this.drawSelf&&c2Object.obj&&c2Object.obj.frames.length>0)
-					{
-						this.associateAllTypes();
-						inst=c2Object.inst;
-					}
-				}
-				else
-				{
-					inst.collisionsEnabled = newState;
-					inst.visible=newState;
-				}
-			}
-		}
-	};
-	instanceProto.setAllInvisible = function()
-	{
-		var c2ObjectArray=this.c2ObjectArray;
-		if(c2ObjectArray)
-		{
-			for(var o=0;o<c2ObjectArray.length;o++)
-			{
-				var c2Object=c2ObjectArray[o];
-				var inst=c2Object.inst;
-				if(!inst)
-				{
-					this.associateAllTypes();
-					inst=c2Object.inst;
-				}
-				if(inst)
-				{
-					inst.visible=false;
-				}
-			}
-		}
-	};
-	instanceProto.setAnimTo = function(animName,tick)
-	{
-		tick = (typeof tick !== 'undefined') ? tick : true;
-		this.playTo=-1;
-		this.changeAnimTo=this.getAnimFromEntity(animName);
-		if(!this.changeAnimTo&&(!this.currentAnimation)&&this.entity)
-		{
-			this.changeAnimTo=this.entity.animations[0];
-		}
-		if(!this.changeAnimTo)
-		{
-			this.startingAnimName=animName;
-			this.changeToStartFrom=0;
-			this.blendStartTime=0;
-			this.blendEndTime=0;
-			this.secondAnimation=null;
-			this.blendPoseTime=0;
-		}
-		var anim=this.currentAnimation;
-		if(anim)
-		{
-			this.animPlaying=true;
-		}
-		this.setAllCollisionsAndVisibility(false);
-		this.runtime.tick2Me(this);
-		if(tick)
-		{
-			this.tick2();
-		}
-	};
-instanceProto.setAnimTime = function (units,time)
-	{
-		var currentAnimation=this.currentAnimation;
-		var lastSpriterTime=this.currentSpriterTime;
-		if(currentAnimation)
-		{
-			if(units===0)// milliseconds
-			{
-				this.currentSpriterTime=time;
-			}
-			else if(units==1)// ratio
-			{
-				this.currentSpriterTime=time*currentAnimation.length;
-			}
-		}
-		if(lastSpriterTime!=this.currentSpriterTime)
-		{
-			this.force=true;
-		}
-	};
-	instanceProto.soundlineFromName = function(name)
-	{
-		if(this.soundLineToTrigger&&this.soundLineToTrigger.name===name)
-		{
-			return this.soundLineToTrigger;
-		}
-		var anim=this.currentAnimation;
-		if(anim)
-		{
-			for(var s=0;s<anim.soundlines.length;s++)
-			{
-				var soundline=anim.soundlines[s];
-				if(soundline&&soundline.name===name)
-				{
-					return soundline;
-				}
-			}
-		}
-	}
-	function Cnds() {}
-	Cnds.prototype.readyForSetup = function ()
-	{
-			return true;
-	};
-	Cnds.prototype.outsidePaddedViewport = function()
-	{
-		return this.isOutsideViewportBox();
-	}
-	Cnds.prototype.actionPointExists = function(pointName)
-	{
-		var timeline=this.timelineFromName(pointName);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.x!==undefined)
-			{
-					return true;
-			}
-		}
-		return false;
-	};
-	Cnds.prototype.objectExists = function(pointName)
-	{
-		var timeline=this.timelineFromName(pointName);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.x!==undefined)
-			{
-					return true;
-			}
-		}
-		return false;
-	};
-	Cnds.prototype.OnAnimFinished = function (animname)
-	{
-		return this.currentAnimation.name.toLowerCase() === animname.toLowerCase();
-	};
-	Cnds.prototype.OnSoundTriggered = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnEventTriggered = function (name)
-	{
-		if(name===this.eventToTrigger)
-		{
-			return true;
-		}
-	};
-	Cnds.prototype.tagActive = function(tagName,objectName)
-	{
-		var anim=this.currentAnimation;
-		if(anim)
-		{
-			if(objectName)
-			{
-				var line=this.timelineFromName(objectName);
-				if(line)
-				{
-					return this.tagStatus(tagName,line.meta);
-				}
-			}
-			else
-			{
-				return this.tagStatus(tagName,anim.meta);
-			}
-		}
-		return false;
-	}
-	Cnds.prototype.OnSoundVolumeChangeTriggered = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnSoundPanningChangeTriggered = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnAnyAnimFinished = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.CompareCurrentKey = function (cmp,frame)
-	{
-		return cr.do_cmp(this.currentFrame(), cmp, frame);
-	};
-	Cnds.prototype.CompareCurrentTime = function (cmp,time,format)
-	{
-		if(format===0)//milliseconds
-		{
-			return cr.do_cmp(this.currentSpriterTime, cmp, time);
-		}
-		else
-		{
-			var anim=this.currentAnimation;
-			if(anim)
-			{
-				return cr.do_cmp(this.currentSpriterTime/this.currentAnimation.length, cmp, time);
-			}
-			else
-			{
-				return false;
-			}
-		}
-	};
-	Cnds.prototype.CompareAnimation = function (name)
-	{
-		var blendingTo=this.secondAnimation;
-		if(blendingTo&&blendingTo.name===name&&this.blendEndTime>0)
-		{
-			return true;
-		}
-		var anim=this.currentAnimation;
-		if(anim&&anim.name===name)
-		{
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-	};
-	Cnds.prototype.CompareEntity = function (name)
-	{
-		var ent=this.entity;
-		if(ent&&ent.name===name)
-		{
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-	};
-	Cnds.prototype.AnimationPaused = function ()
-	{
-		return !this.animPlaying;
-	};
-	Cnds.prototype.AnimationLooping = function ()
-	{
-		var anim=this.currentAnimation;
-		if(anim&&anim.looping==="true")
-		{
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-	};
-	Cnds.prototype.isMirrored = function ()
-	{
-		return this.xFlip;
-	};
-	Cnds.prototype.isFlipped = function ()
-	{
-		return this.yFlip;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {}
-	Acts.prototype.setPlaybackSpeedRatio = function (newSpeed)
-	{
-		this.speedRatio=newSpeed;
-	};
-	Acts.prototype.setVisible = function (visible)
-	{
-		if(visible===1)
-		{
-			this.visible=true;
-		}
-		else
-		{
-			this.visible=false;
-		}
-	};
-	Acts.prototype.setOpacity = function (newOpacity)
-	{
-		this.opacity=clamp(0.0,1.0,newOpacity/100.0);
-	};
-	Acts.prototype.setAutomaticPausing = function (newPauseSetting,leftBuffer,rightBuffer,topBuffer,bottomBuffer)
-	{
-		this.pauseWhenOutsideBuffer=newPauseSetting;
-		this.leftBuffer=leftBuffer;
-		this.rightBuffer=rightBuffer;
-		this.topBuffer=topBuffer;
-		this.bottomBuffer=bottomBuffer;
-	}
-	Acts.prototype.setObjectScaleRatio = function (newScale,xFlip,yFlip)
-	{
-		this.scaleRatio=newScale;
-		this.xFlip=xFlip;
-		this.yFlip=yFlip;
-		this.force=true;
-	};
-	Acts.prototype.setObjectXFlip = function (xFlip)
-	{
-		this.xFlip=xFlip;
-		this.force=true;
-	};
-	Acts.prototype.setIgnoreGlobalTimeScale = function (ignore)
-	{
-		this.ignoreGlobalTimeScale=(ignore==1);
-	}
-	Acts.prototype.findSpriterObject = function (c2Object)
-	{
-		if(this.currentAnimation)
-		{
-			var timelines=this.currentAnimation.timelines;
-			for(var t=0;t<timelines.length;t++)
-			{
-				var timeline=timelines[t];
-				if(timeline&&timeline.c2Object)
-				{
-					if(timeline.c2Object.inst==c2Object.getFirstPicked())
-					{
-						this.lastFoundObject=timeline.name;
-						return;
-					}
-				}
-			}
-		}
-	}
-	Acts.prototype.setObjectYFlip = function (yFlip)
-	{
-		this.yFlip=yFlip;
-		this.force=true;
-	};
-	var PLAYFROMSTART=0;
-	var PLAYFROMCURRENTTIME=1;
-	var PLAYFROMCURRENTTIMERATIO=2;
-	var BLENDTOSTART=3;
-	var BLENDATCURRENTTIMERATIO=4;
-	Acts.prototype.setC2ObjectToSpriterObject = function (c2Object, propertiesToSet, spriterObjectName)
-	{
-		this.objectsToSet.push(new C2ObjectToSpriterObjectInstruction(c2Object,spriterObjectName,propertiesToSet));
-	}
-	Acts.prototype.setAnimation = function (animName,startFrom,blendDuration)
-	{
-		this.setAnim(animName,startFrom,blendDuration);
-	};
-	Acts.prototype.setSecondAnim = function (animName)
-	{
-		this.secondAnimation=this.getAnimFromEntity(animName);
-		if(this.secondAnimation===this.currentAnimation)
-		{
-			this.secondAnimation=null;
-		}
-	};
-	Acts.prototype.stopSecondAnim = function (animName)
-	{
-		this.secondAnimation=null;
-		this.animBlend=0;
-	};
-	Acts.prototype.setAnimBlendRatio = function (newBlend)
-	{
-		this.animBlend=newBlend;
-	};
-	Acts.prototype.setEnt = function (entName,animName)
-	{
-		var newAnimName=animName;
-		if(this.entity&&this.currentAnimation&&this.entity.name==entName&&this.currentAnimation.name==animName)
-		{
-			return;
-		}
-		var newEntSet=false;
-		if(this.currentAnimation&&newAnimName==="")
-		{
-			newAnimName=this.currentAnimation.name;
-		}
-		var sameAnimName = false;
-		if(newAnimName===this.currentAnimation.name)
-		{
-			sameAnimName = true;
-		}
-		if(entName!==""&&((!this.entity)||entName!=this.entity.name))
-		{
-			this.setEntTo(entName);
-			newEntSet=true;
-		}
-		if(newAnimName!==""&&(newEntSet||!sameAnimName))
-		{
-			this.setAnimTo(newAnimName);
-		}
-	};
-	Acts.prototype.playAnimTo = function (units,playTo)
-	{
-		if(units===0)// keyframes
-		{
-			var mainKeys=this.currentAnimation.mainlineKeys;
-			if(mainKeys)
-			{
-				var key=mainKeys[playTo];
-				if(key)
-				{
-					this.playTo=key.time;
-				}
-				else
-				{
-					this.playTo=-1;
-					return;
-				}
-			}
-		}
-		else if(units==1)// milliseconds
-		{
-			this.playTo=playTo;
-		}
-		else if(units==2)// ratio
-		{
-			this.playTo=playTo*this.currentAnimation.length;
-		}
-		if(this.playTo==this.currentSpriterTime)
-		{
-			this.playTo=-1;
-			return;
-		}
-		var reverseFactor=1;
-		if(this.currentAnimation.looping=="true")
-		{
-			var forwardDistance=0;
-			var backwardDistance=0;
-			if(this.playTo>this.currentSpriterTime)
-			{
-				forwardDistance=this.playTo-this.currentSpriterTime;
-				backwardDistance=(this.currentAnimation.length-this.playTo)+this.currentSpriterTime;
-			}
-			else
-			{
-				forwardDistance=this.playTo+(this.currentAnimation.length-this.currentSpriterTime);
-				backwardDistance=this.currentSpriterTime-this.playTo;
-			}
-			if(backwardDistance<forwardDistance)
-			{
-				reverseFactor=-1;
-			}
-		}
-		else
-		{
-			if(this.playTo<this.currentSpriterTime)
-			{
-				reverseFactor=-1;
-			}
-		}
-		this.speedRatio=Math.abs(this.speedRatio)*reverseFactor;
-		this.animPlaying=true;
-		this.tick2();
-	};
-	Acts.prototype.associateTypeWithName = function (type,name)
-	{
-		var c2ObjectArray=this.c2ObjectArray;
-		var objectArray=this.objectArray;
-		for(var o = 0,len = objectArray.length;o<len;o++)
-		{
-			var obj=objectArray[o];
-			if(name==obj.name)
-			{
-				obj.fullTypeName=type.name;
-				var c2Object=c2ObjectArray[o];
-				c2Object.type=type;
-				var iid = this.get_iid(); // get my IID
-				var paired_inst = type.instances[iid];
-				c2Object.inst=paired_inst;
-				var animations=this.entity.animations;
-				for(var a = 0,lenA=animations.length;a<lenA;a++)
-				{
-					var animation=animations[a];
-					var timelines=animation.timelines;
-					for(var t = 0,lenT=timelines.length;t<lenT;t++)
-					{
-						var timeline=timelines[t];
-						if(name==timeline.name)
-						{
-							timeline.c2Object=c2Object;
-						}
-					}
-				}
-				break;
-			}
-		}
-	};
-	Acts.prototype.setAnimationLoop = function (loopOn)
-	{
-		var currentAnimation=this.currentAnimation;
-		if(this.changeAnimTo)
-		{
-			currentAnimation=this.changeAnimTo;
-		}
-		if(currentAnimation)
-		{
-			if(loopOn===0)
-			{
-				currentAnimation.looping="false";
-			}
-			else if(loopOn==1)
-			{
-				currentAnimation.looping="true";
-			}
-		}
-		else
-		{
-			if(loopOn===0)
-			{
-				this.startingLoopType="false";
-			}
-			else if(loopOn==1)
-			{
-				this.startingLoopType="true";
-			}
-		}
-	};
-	Acts.prototype.setAnimationTime = function (units,time)
-	{
-		this.setAnimTime(units,time);
-	};
-	Acts.prototype.pauseAnimation = function ()
-	{
-		this.animPlaying=false;
-	};
-	Acts.prototype.resumeAnimation = function ()
-	{
-		if(this.animPlaying===false)
-		{
-			this.lastKnownTime = this.getNowTime();
-		}
-		this.animPlaying=true;
-		var anim=this.currentAnimation;
-		if(anim)
-		{
-			if(this.speedRatio>0)
-			{
-				if(this.currentSpriterTime==anim.length)
-				{
-				this.currentSpriterTime=0;
-				}
-			}
-			else if(this.currentSpriterTime===0)
-			{
-				this.currentSpriterTime=this.currentAnimation.length;
-			}
-		}
-	};
-	Acts.prototype.removeAllCharMaps = function ()
-	{
-		var c2Objs=this.c2ObjectArray;
-		for(var c=0;c<c2Objs.length;c++)
-		{
-			var c2Obj=c2Objs[c];
-			c2Obj.appliedMap=[];
-		}
-		this.tick2(true);
-	};
-	Acts.prototype.appendCharMap = function (mapName)
-	{
-		var c2Objs=this.c2ObjectArray;
-		for(var c=0;c<c2Objs.length;c++)
-		{
-			var c2Obj=c2Objs[c];
-			if(c2Obj)
-			{
-				if(c2Obj.obj)
-				{
-					var charMap=c2Obj.obj.charMaps[mapName];
-					if(charMap)
-					{
-						for(var m=0;m<charMap.length;m++)
-						{
-							var map=charMap[m];
-							if(map)
-							{
-								c2Obj.appliedMap[map.oldFrame]=map.newFrame;
-							}
-						}
-					}
-				}
-			}
-		}
-		this.tick2(true);
-	};
-	Acts.prototype.overrideObjectComponent = function (objectName, component, newValue)
-	{
-		var override=this.objectOverrides[objectName];
-		if(typeof override === 'undefined')
-		{
-			this.objectOverrides[objectName]={};
-			override=this.objectOverrides[objectName];
-		}
-		override[component]=newValue;
-	}
-	Acts.prototype.overrideBonesWithIk = function (parentBoneName, childBoneName, targetX, targetY, additionalLength)
-	{
-		var override=this.boneIkOverrides[parentBoneName];
-		if(typeof override === 'undefined')
-		{
-			this.boneIkOverrides[parentBoneName]={};
-			override=this.boneIkOverrides[parentBoneName];
-		}
-		override.targetX=targetX;
-		override.targetY=targetY;
-		override.childBone=childBoneName;
-		override.additionalLength=additionalLength;
-	}
-	pluginProto.acts = new Acts();
-	function Exps() {}
-	Exps.prototype.time = function (ret)
-	{
-		ret.set_int(this.currentSpriterTime);
-	};
-	Exps.prototype.val = function (ret,varname,objectName)
-	{
-		var anim=this.currentAnimation;
-		if(anim)
-		{
-			if(objectName)
-			{
-				var line=this.timelineFromName(objectName);
-				if(line)
-				{
-					this.varStatus(ret,varname,line.meta);
-					return;
-				}
-			}
-			else
-			{
-				this.varStatus(ret,varname,anim.meta);
-				return;
-			}
-		}
-		ret.set_float(0);
-	}
-	Exps.prototype.pointX = function (ret,name)
-	{
-		var timeline=this.timelineFromName(name);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.x!==undefined)
-			{
-				ret.set_float(timeline.currentObjectState.x);
-				return;
-			}
-		}
-		ret.set_float(0);
-	};
-	Exps.prototype.pointY = function (ret,name)
-	{
-		var timeline=this.timelineFromName(name);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.y!==undefined)
-			{
-				ret.set_float(timeline.currentObjectState.y);
-				return;
-			}
-		}
-			ret.set_float(0);
-	};
-	Exps.prototype.pointAngle = function (ret,name)
-	{
-		var timeline=this.timelineFromName(name);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.angle!==undefined)
-			{
-				ret.set_float(cr.to_degrees(timeline.currentObjectState.angle));
-				return;
-			}
-		}
-			ret.set_float(0);
-	};
-	Exps.prototype.objectX = function (ret,name)
-	{
-		var timeline=this.timelineFromName(name);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.x!==undefined)
-			{
-				ret.set_float(timeline.currentObjectState.x);
-				return;
-			}
-		}
-		ret.set_float(0);
-	};
-	Exps.prototype.objectY = function (ret,name)
-	{
-		var timeline=this.timelineFromName(name);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.y!==undefined)
-			{
-				ret.set_float(timeline.currentObjectState.y);
-				return;
-			}
-		}
-			ret.set_float(0);
-	};
-	Exps.prototype.objectAngle = function (ret,name)
-	{
-		var timeline=this.timelineFromName(name);
-		if(timeline&&timeline.currentObjectState)
-		{
-			if(timeline.currentObjectState.angle!==undefined)
-			{
-				ret.set_float(cr.to_degrees(timeline.currentObjectState.angle));
-				return;
-			}
-		}
-			ret.set_float(0);
-	};
-	Exps.prototype.timeRatio = function (ret)
-	{
-		if(this.currentAnimation)
-		{
-			ret.set_float(this.currentSpriterTime/this.currentAnimation.length);
-		}
-		else
-		{
-			ret.set_float(0);
-		}
-	};
-	Exps.prototype.ScaleRatio = function (ret)
-	{
-		ret.set_float(this.scaleRatio);
-	};
-	Exps.prototype.key = function (ret)
-	{
-		ret.set_int(this.currentFrame());
-	};
-	Exps.prototype.PlayTo = function (ret)
-	{
-		ret.set_int(this.playTo);
-	};
-	Exps.prototype.animationName = function (ret)
-	{
-		if(this.changeAnimTo)
-		{
-			ret.set_string(this.changeAnimTo.name);
-		}
-		else if(this.currentAnimation)
-		{
-			ret.set_string(this.currentAnimation.name);
-		}
-		else
-		{
-			ret.set_string("");
-		}
-	};
-	Exps.prototype.animationLength = function (ret)
-	{
-		if(this.currentAnimation)
-		{
-			ret.set_int(this.currentAnimation.length);
-		}
-		else
-		{
-			ret.set_int(0);
-		}
-	};
-	Exps.prototype.speedRatio = function (ret)
-	{
-		ret.set_float(this.speedRatio);
-	};
-	Exps.prototype.secondAnimationName = function (ret)
-	{
-		if(this.secondAnimation)
-		{
-			ret.set_string(this.secondAnimation.name);
-		}
-		else
-		{
-			ret.set_string("");
-		}
-	};
-	Exps.prototype.entityName = function (ret)
-	{
-		if(this.entity)
-		{
-		ret.set_string(this.entity.name);
-		}
-		else
-		{
-		ret.set_string("");
-		}
-	};
-	Exps.prototype.PlayToTimeLeft = function (ret)
-	{
-		if(this.playTo<0)
-		{
-			return ret.set_float(0);
-		}
-		if(this.currentAnimation.looping=="true")
-		{
-			var forwardDistance=0;
-			var backwardDistance=0;
-			if(speedRatio>=0)
-			{
-				if(this.playTo>this.currentSpriterTime)
-				{
-					return ret.set_float(this.playTo-this.currentSpriterTime);
-				}
-				else
-				{
-					return ret.set_float(this.playTo+(this.currentAnimation.length-this.currentSpriterTime));
-				}
-			}
-			else
-			{
-				if(this.playTo>this.currentSpriterTime)
-				{
-					return ret.set_float((this.currentAnimation.length-this.playTo)+this.currentSpriterTime);
-				}
-				else
-				{
-					return ret.set_float(this.currentSpriterTime-this.playTo);
-				}
-			}
-		}
-		else
-		{
-			return ret.set_float(Math.abs(this.playTo-this.currentSpriterTime));
-		}
-	};
-	Exps.prototype.triggeredSound = function (ret)
-	{
-		ret.set_string(this.soundToTrigger);
-	};
-	Exps.prototype.triggeredSoundTag = function (ret)
-	{
-		if(this.soundLineToTrigger)
-		{
-			ret.set_string(this.soundLineToTrigger.name);
-			return;
-		}
-		ret.set_string("");
-	};
-	Exps.prototype.soundVolume = function (ret,soundTag)
-	{
-		var soundline=this.soundlineFromName(soundTag);
-		if(soundline)
-		{
-			if(soundline.currentObjectState)
-			{
-				ret.set_float(soundline.currentObjectState.volume);
-				return;
-			}
-		}
-		ret.set_float(0);
-	};
-	Exps.prototype.soundPanning = function (ret,soundTag)
-	{
-		var soundline=this.soundlineFromName(soundTag);
-		if(soundline)
-		{
-			if(soundline.currentObjectState)
-			{
-				ret.set_float(soundline.currentObjectState.panning);
-				return;
-			}
-		}
-		ret.set_float(0);
-	};
-	Exps.prototype.blendRatio = function (ret)
-	{
-		ret.set_float(this.animBlend);
-	};
-	Exps.prototype.Opacity = function(ret)
-	{
-		ret.set_float(this.opacity*100.0);
-	}
-	Exps.prototype.BBoxLeft = function (ret)
-	{
-		this.update_bbox();
-		ret.set_float(this.bbox.left);
-	};
-	Exps.prototype.BBoxTop = function (ret)
-	{
-		this.update_bbox();
-		ret.set_float(this.bbox.top);
-	};
-	Exps.prototype.BBoxRight = function (ret)
-	{
-		this.update_bbox();
-		ret.set_float(this.bbox.right);
-	};
-	Exps.prototype.BBoxBottom = function (ret)
-	{
-		this.update_bbox();
-		ret.set_float(this.bbox.bottom);
-	};
-	Exps.prototype.foundObject = function (ret)
-	{
-		ret.set_string(this.lastFoundObject);
-	};
-	pluginProto.exps = new Exps();
-}());
-;
-;
-cr.plugins_.Steam4C2 = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var pluginProto = cr.plugins_.Steam4C2.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	typeProto.onCreate = function()
-	{
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	var Steam4C2 = null;
-	var isAvailable = false;
-	var steamId = null;
-	var AccountValid = null;
-	var isdebug = false;
-	var steam_cloud_total_byte = -1;
-	var steam_cloud_total_available = -1;
-	var steam_cloud_data;
-	var intLDentry= 0;
-	var intLDBpreviousrank = 0;
-	var intLDBnewrank = 0;
-	var arrLDBentry = 0;
-	var intLDB_Dl_Entry = 0;
-	var intLDB_Dl_Entry_count = 0;
-	var strarrLDB_Dl_Entry_str = "empty";
-	var LDB_loading = false;
-	var b_IsLowViolence = false;
-	var int_STstatValue = -1;
-	var ach_number = 0;
-	var ach_name_list = [];
-	var ach_request_unlock_current_name = "";
-	var ach_request_clear_current_name = "";
-	var ach_request_check_current_name = "";
-	instanceProto.onCreate = function()
-	{
-		isdebug = (this.properties[0] === 1);
-		if (!this.runtime.isNodeWebkit)
-		{
-			console.log("Steam4C2 require NodeWebkit. Plugin disable");
-			return;
-		}
-		if (typeof cr_is_preview !== "undefined")
-		{
-			console.log("Steam4C2 can't run in preview. Plugin disable");
-			return;
-		}
-		Steam4C2 = require("./Steam4C2");
-		if (Steam4C2)
-		{
-			this.printlog("Steam4C2 loaded.");
-			if (Steam4C2["initAPI"]())
-			{
-				this.printlog("Steam API loaded.");
-				isAvailable = true;
-				steamId = Steam4C2["getSteamId"]();
-				if (Steam4C2["IsLowViolence"]())
-				{
-					b_IsLowViolence = true;
-				}
-				var self = this;
-				if (Steam4C2.on)
-				{
-					Steam4C2.on("game-overlay-activated", function (isActive)
-					{
-						if (isActive)
-							self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnGameOverlayActivated, self);
-						else
-							self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnGameOverlayDeactivated, self);
-					});
-					Steam4C2.on("low-battery", function ()
-					{
-						self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnLowBatWarn, self);
-					});
-				}
-				Steam4C2["getCloudQuota"](function(stcdtotal,stcdavailable)
-				{
-					steam_cloud_total_byte = stcdtotal;
-					steam_cloud_total_available = stcdavailable;
-				}, function(err)
-				{
-					this.printlog(err);
-				});
-			} else
-			{
-				this.printlog("Steam API is not loaded.");
-				this.printlog("DLL are missing/corrupted or not found.");
-				return ;
-			}
-		} else {
-			this.printlog("Error: Steam4C2 is not loaded.");
-			this.printlog("Files are missing/corrupted or not found.");
-			this.printlog("Plugin disabled.");
-			return;
-		}
-	};
-	instanceProto.printlog = function(err)
-	{
-		if (isdebug)
-			console.log(err);
-	};
-	instanceProto.onDestroy = function ()
-	{
-	};
-	instanceProto.saveToJSON = function ()
-	{
-		return {
-		};
-	};
-	instanceProto.loadFromJSON = function (o)
-	{
-	};
-	instanceProto.draw = function(ctx)
-	{
-	};
-	instanceProto.drawGL = function (glw)
-	{
-	};
-	function Cnds() {};
-	Cnds.prototype.IsAvailable = function ()
-	{
-		return isAvailable;
-	};
-	Cnds.prototype.OnAnyUnlockAchievementRequestSuccess = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnAnyUnlockAchievementRequestError = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnAchievementUnlockedSucces = function (achname)
-	{
-		return ach_request_unlock_current_name === achname;
-	};
-	Cnds.prototype.OnAchievementUnlockedError = function (achname)
-	{
-		return ach_request_unlock_current_name === achname;
-	};
-	Cnds.prototype.OnAchievementUnlockedErrorAlready = function (achname)
-	{
-		return ach_request_unlock_current_name === achname;
-	};
-	Cnds.prototype.OnAnyResetAchievementRequestSuccess = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnAnyResetAchievementRequestError = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnResetAchievementRequestSuccess = function (achname)
-	{
-		return ach_request_clear_current_name === achname;
-	};
-	Cnds.prototype.OnResetAchievementRequestError = function (achname)
-	{
-		return ach_request_clear_current_name === achname;
-	};
-	Cnds.prototype.OnAnyCheckAchievementRequestSuccess = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnAnyCheckAchievementRequestError = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnCheckAchievementRequestGeneralError = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnCheckAchievementRequestSuccess = function (achname)
-	{
-		return ach_request_check_current_name === achname;
-	};
-	Cnds.prototype.OnCheckAchievementRequestError = function (achname)
-	{
-		return ach_request_check_current_name === achname;
-	};
-	Cnds.prototype.OnGameOverlayActivated = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnGameOverlayDeactivated = function()
-	{
-		return true;
-	};
-	Cnds.prototype.IsOverlayEnabled = function ()
-	{
-		if (!isAvailable)
-		{
-			return false;
-		} else {
-			if(Steam4C2["isGameOverlayEnabled"]())
-			{
-				return true;
-			}else{
-				return false;
-			}
-		}
-	};
-	Cnds.prototype.IsCloudEnabled = function ()
-	{
-		if (!isAvailable)
-		{
-			return false;
-		} else {
-			if(Steam4C2["isCloudEnabled"]())
-			{
-				return true;
-			}else{
-				return false;
-			}
-		}
-	};
-	Cnds.prototype.IsCloudEnabledForUser = function ()
-	{
-		if (!isAvailable)
-		{
-			return false;
-		} else {
-			if(Steam4C2["isCloudEnabledForUser"]())
-			{
-				return true;
-			}else{
-				return false;
-			}
-		}
-	};
-	Cnds.prototype.OnStLDBError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStLDBFoundSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStLDBFoundError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStLDBUpdSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStLDBUpdError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStLDBdlSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnStLDBdlError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnSetStatSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnSetStatError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnGetStatSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnGetStatError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnUpdateStatSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnUpdateStatError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnLowBatWarn = function()
-	{
-		return true;
-	};
-	Cnds.prototype.IsDLCowned = function (stdlcid)
-	{
-		return (Steam4C2["DlcVerif"](stdlcid));
-	};
-	Cnds.prototype.IsLV = function()
-	{
-		return b_IsLowViolence;
-	};
-	Cnds.prototype.IsSteamInBPM = function ()
-	{
-		return (Steam4C2["IsBPMode"]());
-	};
-	Cnds.prototype.OnWritefileToCloudSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnWritefileToCloudError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnReadfileFromCloudSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnReadfileFromCloudError = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnDeletefileFromCloudSuccess = function()
-	{
-		return true;
-	};
-	Cnds.prototype.OnDeletefileFromCloudError = function()
-	{
-		return true;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.UnlockSteamAchievement = function (ach_name)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["activateAchievement"](ach_name, function ()
-		{
-			ach_request_unlock_current_name = ach_name;
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAchievementUnlockedSucces, self);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAnyUnlockAchievementRequestSuccess, self);
-			ach_request_unlock_current_name = "";
-		}, function (err)
-		{
-			self.printlog(err);
-			ach_request_unlock_current_name = ach_name;
-			if (err === "Achievement is already achieved.")
-			{
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAchievementUnlockedErrorAlready, self);
-			} else {
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAchievementUnlockedError, self);
-			}
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAnyUnlockAchievementRequestError, self);
-			ach_request_unlock_current_name = "";
-		});
-	};
-	Acts.prototype.ResetSteamAchievement = function (clrachievement)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["clearAchievement"](clrachievement, function ()
-		{
-			ach_request_clear_current_name = clrachievement;
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnResetAchievementRequestSuccess, self);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAnyResetAchievementRequestSuccess, self);
-			ach_request_clear_current_name = "";
-		}, function (err)
-		{
-			ach_request_clear_current_name = clrachievement;
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnResetAchievementRequestError, self);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAnyResetAchievementRequestError, self);
-			ach_request_clear_current_name = "";
-		});
-	};
-	Acts.prototype.CheckSteamAchievement = function (achievement)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["getAchievement"](achievement , function (is_achieved)
-		{
-			ach_request_check_current_name = achievement;
-			if (is_achieved){
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnCheckAchievementRequestSuccess, self);
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAnyCheckAchievementRequestSuccess, self);
-				ach_request_check_current_name = "";
-			} else {
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnAnyCheckAchievementRequestError, self);
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnCheckAchievementRequestError, self);
-				ach_request_check_current_name = "";
-			}
-		}, function (err){
-				self.printlog(err);
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnCheckAchievementRequestGeneralError, self);
-		});
-	};
-	Acts.prototype.SetSteamStat = function (namstat , statvalue)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["SetStat"](namstat, statvalue, function ()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnSetStatSuccess, self);
-		}, function (err)
-		{
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnSetStatError, self);
-		});
-	};
-	Acts.prototype.UpdateSteamStat = function (namstat , statvalue)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["UpdateStat"](namstat, statvalue, function ()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnUpdateStatSuccess, self);
-		}, function (err)
-		{
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnUpdateStatError, self);
-		});
-	};
-	Acts.prototype.DLSteamStat = function (namstat)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["GetStat"](namstat, function (DLSteamstatvalue)
-		{
-			int_STstatValue = DLSteamstatvalue;
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnGetStatSuccess, self);
-		}, function (err)
-		{
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnGetStatError, self);
-		});
-	};
-	var overlay_options = [
-		"Friends",
-		"Community",
-		"Players",
-		"Settings",
-		"OfficialGameGroup",
-		"Stats",
-		"Achievements"
-	];
-	Acts.prototype.ActivateOverlay = function (option)
-	{
-		if (!isAvailable)
-			return;
-		Steam4C2["activateGameOverlay"](overlay_options[option]);
-	};
-	var CloudFlag = [
-		true,
-		false
-	];
-	Acts.prototype.enableCloud = function (enable_flag)
-	{
-		if (!isAvailable)
-			return;
-		Steam4C2["enableCloud"](CloudFlag[enable_flag]);
-	};
-	Acts.prototype.StLeaderboardExist = function (leaderboardname)
-	{
-		if (!isAvailable)
-			return;
-		if(LDB_loading)
-			return;
-		var self = this;
-		intLDentry = 0;
-		Steam4C2["LeaderboardInitObj"](leaderboardname, function (is_found,LDEntry)
-		{
-			if (is_found)
-			{
-				intLDentry = LDEntry;
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBFoundSuccess, self);
-			} else
-			{
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBFoundError, self);
-			}
-		},function()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBError, self);
-		});
-	};
-	var UpdtmetFlag = [
-		1,
-		2
-	];
-	Acts.prototype.StUpdateLeaderboard = function (leaderboardname ,score ,updtmet)
-	{
-		if (!isAvailable)
-			return;
-		if(LDB_loading)
-			return;
-		var self = this;
-		intLDBnewrank = 0;
-		intLDBpreviousrank = 0;
-		Steam4C2["UpdateLeaderboard"](leaderboardname, score, UpdtmetFlag[updtmet], function ( ldb_up_is_found , is_updated , ldbnewrank , ldbprevrank)
-		{
-			if (ldb_up_is_found)
-			{
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBFoundSuccess, self);
-				if (is_updated)
-				{
-					intLDBnewrank = ldbnewrank;
-					intLDBpreviousrank = ldbprevrank;
-					self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBUpdSuccess, self);
-				} else
-				{
-					self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBUpdError, self);
-				}
-			} else
-			{
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBFoundError, self);
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBUpdError, self);
-			}
-		},function()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBError, self);
-		});
-	};
-	var DataSortFlag = [
-		1,
-		2,
-		3,
-		4
-	];
-	Acts.prototype.StDlLeaderboard = function (leaderboardname ,sorttype)
-	{
-		if (!isAvailable)
-			return;
-		if(LDB_loading)
-			return;
-		var self = this;
-		intLDB_Dl_Entry = 0;
-		intLDB_Dl_Entry_count = 0;
-		strarrLDB_Dl_Entry_str = "empty";
-		Steam4C2["LeaderboardDLEnt"](leaderboardname, DataSortFlag[sorttype], function (ldb_up_is_found , is_dlsucs , LDB_dl_entry_ , LDB_dl_entry_count_ , LDB_dl_arr_entry)
-		{
-			if (ldb_up_is_found)
-			{
-				intLDB_Dl_Entry = LDB_dl_entry_;
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBFoundSuccess, self);
-				if (is_dlsucs)
-				{
-					intLDB_Dl_Entry_count = LDB_dl_entry_count_;
-					strarrLDB_Dl_Entry_str = LDB_dl_arr_entry;
-					self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBdlSuccess, self);
-				} else
-				{
-					self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBdlError, self);
-				}
-			} else
-			{
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBFoundError, self);
-				self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBdlError, self);
-			}
-		},function()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnStLDBError, self);
-		});
-	};
-	Acts.prototype.ActivateOverlayforWebpage = function (lnkstr)
-	{
-		if (!isAvailable)
-			return;
-		Steam4C2["activateGameOverlayToWebPage"](lnkstr);
-	};
-	var StoreFlag = [
-		0,
-		1,
-		2
-	];
-	Acts.prototype.ActivateOverlayforStorepage = function (lnkappid, flagstore)
-	{
-		if (!isAvailable)
-			return;
-		Steam4C2["activateGameOverlayToStorePage"](lnkappid, StoreFlag[flagstore]);
-	};
-	Acts.prototype.SendtoStCl = function (flname, flcontent)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["savedatatoCloud"]( flname, flcontent, function ()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnWritefileToCloudSuccess, self);
-		}, function (err)
-		{
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnWritefileToCloudError, self);
-		}
-		);
-	};
-	Acts.prototype.ReadfromStCl = function (flname)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["readfilecontentfromcloud"]( flname, function (flcontent)
-		{
-			steam_cloud_data = flcontent;
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnReadfileFromCloudSuccess, self);
-		}, function (err)
-		{
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnReadfileFromCloudError, self);
-		}
-		);
-	};
-	Acts.prototype.DeletefromStCl = function (flname)
-	{
-		if (!isAvailable)
-			return;
-		var self = this;
-		Steam4C2["deleteFileFromCloud"]( flname, function ()
-		{
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnDeletefileFromCloudSuccess, self);
-		}, function (err)
-		{
-			self.printlog(err);
-			self.runtime.trigger(cr.plugins_.Steam4C2.prototype.cnds.OnDeletefileFromCloudError, self);
-		}
-		);
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.AccountID = function (ret)
-	{
-		ret.set_int(steamId ? (steamId["accountId"] || 0) : 0);
-	};
-	Exps.prototype.StaticAccountID = function (ret)
-	{
-		ret.set_int(steamId ? (steamId["staticAccountId"] || 0) : 0);
-	};
-	Exps.prototype.ScreenName = function (ret)
-	{
-		ret.set_string(steamId ? (steamId["screenName"] || "") : "");
-	};
-	Exps.prototype.UserLevel = function (ret)
-	{
-		ret.set_int(steamId ? (steamId["level"] || 0) : 0);
-	};
-	Exps.prototype.getNumberOfAchievements = function (ret)
-	{
-		ret.set_int((Steam4C2["getNumberOfAchievements"]()));
-	};
-	Exps.prototype.getCurrentGameLanguage = function (ret)
-	{
-		ret.set_string((Steam4C2["getCurrentGameLanguage"]()));
-	};
-	Exps.prototype.getCurrentUILanguage = function (ret)
-	{
-		ret.set_string((Steam4C2["getCurrentUILanguage"]()));
-	};
-	Exps.prototype.getAchievementNames = function (ret)
-	{
-		var temp = Steam4C2["getAchievementNames"]();
-		ret.set_string((temp.toString()));
-	};
-	Exps.prototype.getEntryCount = function (ret)
-	{
-		ret.set_int(intLDentry);
-	};
-	Exps.prototype.getLDBnewrank = function (ret)
-	{
-		ret.set_int(intLDBnewrank);
-	};
-	Exps.prototype.getLDBprevrank = function (ret)
-	{
-		ret.set_int(intLDBpreviousrank);
-	};
-	Exps.prototype.getLDBentry = function (ret)
-	{
-		ret.set_int(arrLDBentry);
-	};
-	Exps.prototype.getLDBdlentry = function (ret)
-	{
-		ret.set_int(intLDB_Dl_Entry);
-	};
-	Exps.prototype.getLDBdlentrycount = function (ret)
-	{
-		ret.set_int(intLDB_Dl_Entry_count);
-	};
-	Exps.prototype.getLDBdlEntryStr = function (ret)
-	{
-		ret.set_string(strarrLDB_Dl_Entry_str);
-	};
-	Exps.prototype.getSteamstatvalue = function (ret)
-	{
-		ret.set_any( int_STstatValue );
-	};
-	Exps.prototype.getfriendnumb = function (ret)
-	{
-		ret.set_int((Steam4C2["getFriendCount"]()) );
-	};
-	Exps.prototype.getfriendname = function (ret)
-	{
-		var temp = Steam4C2["getFriendsNames"]();
-		ret.set_string((temp.toString()));
-	};
-	Exps.prototype.getBatPower = function (ret)
-	{
-		ret.set_int((Steam4C2["GetCurPowerLaptop"]()));
-	};
-	Exps.prototype.getSteamTimeServ = function (ret)
-	{
-		ret.set_int((Steam4C2["GetSteamTimeServ"]()));
-	};
-	Exps.prototype.getAppIDSteam = function (ret)
-	{
-		ret.set_int((Steam4C2["GetAppID"]()));
-	};
-	Exps.prototype.getSeparatorValue = function (ret)
-	{
-		ret.set_string( " &,& " );
-	};
-	Exps.prototype.GetStatSynch = function (ret , statnametst)
-	{
-		var tststeamstat = (Steam4C2NW12["GetStatSynch"](statnametst));
-		ret.set_any(tststeamstat);
-	};
-	Exps.prototype.GetCloudTotal = function (ret)
-	{
-		ret.set_any(steam_cloud_total_byte);
-	};
-	Exps.prototype.GetCloudAvailable = function (ret)
-	{
-		ret.set_any(steam_cloud_total_available);
-	};
-	Exps.prototype.getCloudDATAst = function (ret)
-	{
-		ret.set_any(steam_cloud_data);
 	};
 	pluginProto.exps = new Exps();
 }());
@@ -31066,7 +24988,7 @@ cr.plugins_.Text = function(runtime)
 		var myscale = 1;
 		if (glmode)
 		{
-			myscale = Math.abs(this.layer.getScale());
+			myscale = this.layer.getScale();
 			ctx.save();
 			ctx.scale(myscale, myscale);
 		}
@@ -31130,24 +25052,22 @@ cr.plugins_.Text = function(runtime)
 		var floatscaledheight = layer_scale * this.height;
 		var scaledwidth = Math.ceil(floatscaledwidth);
 		var scaledheight = Math.ceil(floatscaledheight);
-		var absscaledwidth = Math.abs(scaledwidth);
-		var absscaledheight = Math.abs(scaledheight);
 		var halfw = this.runtime.draw_width / 2;
 		var halfh = this.runtime.draw_height / 2;
 		if (!this.myctx)
 		{
 			this.mycanvas = document.createElement("canvas");
-			this.mycanvas.width = absscaledwidth;
-			this.mycanvas.height = absscaledheight;
-			this.lastwidth = absscaledwidth;
-			this.lastheight = absscaledheight;
+			this.mycanvas.width = scaledwidth;
+			this.mycanvas.height = scaledheight;
+			this.lastwidth = scaledwidth;
+			this.lastheight = scaledheight;
 			need_redraw = true;
 			this.myctx = this.mycanvas.getContext("2d");
 		}
-		if (absscaledwidth !== this.lastwidth || absscaledheight !== this.lastheight)
+		if (scaledwidth !== this.lastwidth || scaledheight !== this.lastheight)
 		{
-			this.mycanvas.width = absscaledwidth;
-			this.mycanvas.height = absscaledheight;
+			this.mycanvas.width = scaledwidth;
+			this.mycanvas.height = scaledheight;
 			if (this.mytex)
 			{
 				glw.deleteTexture(this.mytex);
@@ -31157,14 +25077,14 @@ cr.plugins_.Text = function(runtime)
 		}
 		if (need_redraw)
 		{
-			this.myctx.clearRect(0, 0, absscaledwidth, absscaledheight);
+			this.myctx.clearRect(0, 0, scaledwidth, scaledheight);
 			this.draw(this.myctx, true);
 			if (!this.mytex)
-				this.mytex = glw.createEmptyTexture(absscaledwidth, absscaledheight, this.runtime.linearSampling, this.runtime.isMobile);
+				this.mytex = glw.createEmptyTexture(scaledwidth, scaledheight, this.runtime.linearSampling, this.runtime.isMobile);
 			glw.videoToTexture(this.mycanvas, this.mytex, this.runtime.isMobile);
 		}
-		this.lastwidth = absscaledwidth;
-		this.lastheight = absscaledheight;
+		this.lastwidth = scaledwidth;
+		this.lastheight = scaledheight;
 		glw.setTexture(this.mytex);
 		glw.setOpacity(this.opacity);
 		glw.resetModelView();
@@ -31676,7 +25596,7 @@ cr.plugins_.TiledBg = function(runtime)
 		cr.setGLBlend(this, effect, this.runtime.gl);
 		this.runtime.redraw = true;
 	};
-	Acts.prototype.LoadURL = function (url_, crossOrigin_)
+	Acts.prototype.LoadURL = function (url_)
 	{
 		var img = new Image();
 		var self = this;
@@ -31697,9 +25617,9 @@ cr.plugins_.TiledBg = function(runtime)
 			self.runtime.redraw = true;
 			self.runtime.trigger(cr.plugins_.TiledBg.prototype.cnds.OnURLLoaded, self);
 		};
-		if (url_.substr(0, 5) !== "data:" && crossOrigin_ === 0)
+		if (url_.substr(0, 5) !== "data:")
 			img.crossOrigin = "anonymous";
-		this.runtime.setImageSrc(img, url_);
+		img.src = url_;
 	};
 	pluginProto.acts = new Acts();
 	function Exps() {};
@@ -31921,7 +25841,7 @@ cr.plugins_.Touch = function(runtime)
 		else if (this.runtime.isCocoonJs)
 			elem2 = elem = window;
 		var self = this;
-		if (typeof PointerEvent !== "undefined")
+		if (window.navigator["pointerEnabled"])
 		{
 			elem.addEventListener("pointerdown",
 				function(info) {
@@ -32759,7 +26679,7 @@ cr.plugins_.Touch = function(runtime)
 		var t = this.touches[index];
 		var dist = cr.distanceTo(t.x, t.y, t.lastx, t.lasty);
 		var timediff = (t.time - t.lasttime) / 1000;
-		if (timediff <= 0)
+		if (timediff === 0)
 			ret.set_float(0);
 		else
 			ret.set_float(dist / timediff);
@@ -32775,7 +26695,7 @@ cr.plugins_.Touch = function(runtime)
 		var touch = this.touches[index];
 		var dist = cr.distanceTo(touch.x, touch.y, touch.lastx, touch.lasty);
 		var timediff = (touch.time - touch.lasttime) / 1000;
-		if (timediff <= 0)
+		if (timediff === 0)
 			ret.set_float(0);
 		else
 			ret.set_float(dist / timediff);
@@ -33652,6 +27572,7 @@ cr.plugins_.gamepad = function(runtime)
 	Exps.prototype.RawButtonCount = function (ret, gamepad)
 	{
 		gamepad = Math.floor(gamepad);
+		index = Math.floor(index);
 		if (gamepad < 0 || gamepad >= this.activeControllers.length)
 		{
 			ret.set_int(0);
@@ -33662,6 +27583,7 @@ cr.plugins_.gamepad = function(runtime)
 	Exps.prototype.RawAxisCount = function (ret, gamepad)
 	{
 		gamepad = Math.floor(gamepad);
+		index = Math.floor(index);
 		if (gamepad < 0 || gamepad >= this.activeControllers.length)
 		{
 			ret.set_int(0);
@@ -33714,6 +27636,451 @@ cr.plugins_.gamepad = function(runtime)
 	Exps.prototype.LastButton = function (ret)
 	{
 		ret.set_int(this.lastButton);
+	};
+	pluginProto.exps = new Exps();
+}());
+;
+;
+cr.plugins_.htmlCODE = function(runtime)
+{
+	this.runtime = runtime;
+};
+var onreturn = false;
+var jsreturn = "";
+function JSreturn(text)
+{
+	onreturn = true;
+	jsreturn = text;
+};
+(function ()
+{
+	var pluginProto = cr.plugins_.htmlCODE.prototype;
+	pluginProto.Type = function(plugin)
+	{
+		this.plugin = plugin;
+		this.runtime = plugin.runtime;
+	};
+	var typeProto = pluginProto.Type.prototype;
+	typeProto.onCreate = function()
+	{
+	};
+	pluginProto.Instance = function(type)
+	{
+		this.type = type;
+		this.runtime = type.runtime;
+	};
+	var instanceProto = pluginProto.Instance.prototype;
+	instanceProto.onCreate = function()
+	{
+		if (this.properties[6])
+		{
+			this.elem = document.createElement("div");
+			this.elem.innerHTML = this.properties[8];
+		} else
+		{
+			this.elem = document.createElement("iframe");
+			this.elem.src = this.properties[7];
+			this.currentURL = this.properties[7];
+		}
+		var widthfactor = this.width > 0 ? 1 : -1;
+		var heightfactor = this.height > 0 ? 1 : -1;
+		this.elem.oWidth = this.width;
+		this.elem.oHeight = this.height;
+		this.x = parseInt(this.x);
+		this.y = parseInt(this.y);
+		this.elem.style.cssText = "-webkit-transform:rotate("+ this.angle * widthfactor * heightfactor*180/3.1416 + "deg);" +
+						 		"-moz-transform:rotate("+ this.angle * widthfactor * heightfactor*180/3.1416 + "deg);" +
+								"-o-transform:rotate("+ this.angle * widthfactor * heightfactor*180/3.1416 + "deg);" +
+								"-ms-transform:rotate("+ this.angle * widthfactor * heightfactor*180/3.1416 + "deg);";
+		this.elem.width = Math.round(this.elem.width);
+		this.elem.height = Math.round(this.elem.height);
+		this.elem.x = Math.round(this.elem.x);
+		this.elem.y = Math.round(this.elem.y);
+		this.elem.id = (this.properties[0]);
+		if (this.properties[2])
+			this.elem.setAttribute("title",this.properties[2]);
+		this.elem.style.background = (this.properties[3]);
+		this.elem.style.border = this.properties[4] ? this.properties[4] : "none";
+		if (this.properties[5] == 0)
+		{
+			this.elem.setAttribute("scrolling","no");
+			this.elem.style.overflow = "hidden";
+		}
+		else if (this.properties[5] == 1)
+		{
+			this.elem.style.overflow = "auto";
+		}
+		else if (this.properties[5] == 2)
+		{
+			this.elem.style.overflowX = "auto";
+			this.elem.style.overflowY = "hidden";
+		}
+		else if (this.properties[5] == 3)
+		{
+			this.elem.style.overflowX = "hidden";
+			this.elem.style.overflowY = "auto";
+		}
+		this.elem.style.color = (this.properties[9]);
+		if (this.properties[11])
+		{
+			this.CSSref = document.createElement("link");
+			this.CSSref.setAttribute("name", this.properties[11]);
+			this.CSSref.setAttribute("rel", "stylesheet");
+			this.CSSref.setAttribute("type", "text/css");
+			this.CSSref.setAttribute("href", this.properties[11]);
+			if (typeof this.CSSref != "undefined")
+				document.getElementsByTagName("head")[0].appendChild(this.CSSref);
+			this.cssFile = this.properties[11];
+		}
+		if (this.properties[12])
+		{
+			this.JSscript = this.properties[12];
+			this.JSref = document.createElement('script');
+			this.JSref.setAttribute("type", "text/javascript");
+			this.JSref.setAttribute("src", this.JSscript);
+			if (typeof this.JSref != "undefined")
+				document.getElementsByTagName("head")[0].appendChild(this.JSref);
+		}
+		jQuery(this.elem).appendTo("body");
+		if (!this.properties[1])
+		{
+			jQuery(this.elem).hide();
+			this.visible = false;
+		}
+		this.scale = 1.0;
+		this.updatePosition();
+		this.runtime.tickMe(this);
+	};
+	instanceProto.onDestroy = function ()
+	{
+		jQuery(this.elem).remove();
+		this.elem = null;
+	};
+	instanceProto.tick = function ()
+	{
+		this.updatePosition();
+	};
+	instanceProto.updatePosition = function (first)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		if (onreturn)
+		{
+			this.runtime.trigger(Cnds.prototype.OnReturn, this);
+			this.runtime.trigger(Cnds.prototype.JSreturn, this);
+		}
+		var left = this.layer.layerToCanvas(this.x, this.y, true);
+		var top = this.layer.layerToCanvas(this.x, this.y, false);
+		var right = this.layer.layerToCanvas(this.x + this.width, this.y + this.height, true);
+		var bottom = this.layer.layerToCanvas(this.x + this.width, this.y + this.height, false);
+		if (!this.visible || !this.layer.visible || right <= 0 || bottom <= 0 || left >= this.runtime.width || top >= this.runtime.height)
+		{
+			jQuery(this.elem).hide();
+			return;
+		}
+		if (left < 1)
+			left = 1;
+		if (top < 1)
+			top = 1;
+		if (right >= this.runtime.width)
+			right = this.runtime.width - 1;
+		if (bottom >= this.runtime.height)
+			bottom = this.runtime.height - 1;
+		jQuery(this.elem).show();
+		var offx = left + jQuery(this.runtime.canvas).offset().left;
+		var offy = top + jQuery(this.runtime.canvas).offset().top;
+		jQuery(this.elem).offset({left: offx, top: offy});
+		jQuery(this.elem).width(right - left);
+		jQuery(this.elem).height(bottom - top);
+		this.elem.width = Math.round(this.elem.width);
+		this.elem.height = Math.round(this.elem.height);
+		this.elem.x = Math.round(this.elem.x);
+		this.elem.y = Math.round(this.elem.y);
+		if (this.properties[10] == 1)
+			jQuery(this.elem).css("font-size", ((this.layer.getScale(true) / this.runtime.devicePixelRatio) - 0.2) + "em");
+		if (this.properties[10] == 2)
+			jQuery(this.elem).css("font-size", ((this.layer.getScale(true) / this.runtime.devicePixelRatio) - 0.3) + "em");
+		if (this.properties[10] == 3)
+			jQuery(this.elem).css("font-size", ((this.layer.getScale(true) / this.runtime.devicePixelRatio) - 0.1) + "em");
+		if (this.properties[10] == 4)
+			jQuery(this.elem).css("font-size", ((this.layer.getScale(true) / this.runtime.devicePixelRatio) - 0.05) + "em");
+	};
+	instanceProto.draw = function(ctx)
+	{
+	};
+	instanceProto.drawGL = function(glw)
+	{
+	};
+	function Cnds() {};
+	Cnds.prototype.CompareCSSFilename = function (text)
+	{
+		if (this.runtime.isDomFree)
+			return false;
+		return cr.equals_nocase(this.cssFile, text);
+	};
+	Cnds.prototype.CompareCSSStyle = function (text)
+	{
+		if (this.runtime.isDomFree)
+			return false;
+		return this.elem.style.cssText === text;
+	};
+	Cnds.prototype.CompareHTML = function (text, case_)
+	{
+		if (this.runtime.isDomFree)
+			return false;
+		if (case_ === 0)	// insensitive
+			return cr.equals_nocase(this.elem.innerHTML, text);
+		else
+			return this.elem.innerHTML === text;
+	};
+	Cnds.prototype.OnError = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnLoad = function ()
+	{
+		return true;
+	};
+	Cnds.prototype.OnReturn = function (text)
+	{
+		onreturn = false;
+		return true;
+	};
+	Cnds.prototype.JSreturn = function (text, case_)
+	{
+		if (this.runtime.isDomFree)
+			return false;
+		if (case_ === 0)	// insensitive
+			return cr.equals_nocase(jsreturn, text);
+		else
+			return jsreturn === text;
+	};
+	Cnds.prototype.IsFocused = function ()
+	{
+		return this.elem === document.activeElement;
+	};
+	Cnds.prototype.IsLoading = function ()
+	{
+		return this.load;
+	};
+	Cnds.prototype.URL = function (text)
+	{
+		if (!this.properties[6])
+			return text == this.elem.contentWindow.location.href;
+	};
+	pluginProto.cnds = new Cnds();
+	function Acts() {};
+	Acts.prototype.SetVisible = function (vis)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.visible = (vis !== 0);
+	};
+	Acts.prototype.SetTooltip = function (text)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.title = text;
+	};
+	Acts.prototype.ImpCSSFile = function (filename)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.CSSref = document.createElement("link");
+		this.CSSref.setAttribute("name", filename);
+		this.CSSref.setAttribute("rel", "stylesheet");
+		this.CSSref.setAttribute("type", "text/css");
+		this.CSSref.setAttribute("href", filename);
+		if (typeof this.CSSref != "undefined")
+			document.getElementsByTagName("head")[0].appendChild(this.CSSref);
+		this.cssFile = filename;
+	};
+	Acts.prototype.RemCSSFile = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.remove = document.getElementsByTagName("link");
+		for (var i = this.elem.remove.length; i >= 0; i--) {
+			if (this.elem.remove[i] && this.elem.remove[i].getAttribute("name") === this.cssFile) {
+				this.elem.remove[i].parentNode.removeChild(this.elem.remove[i]);
+				break;
+			}
+		}
+		this.cssFile = "";
+	};
+	Acts.prototype.SetCSS = function (p, v)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		jQuery(this.elem).css(p,v);
+	};
+	Acts.prototype.SetScale = function (scale, r)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.style.transform = "scale("+scale+")";
+		if (r)
+		{
+			this.width = (this.width * this.scale) / scale;
+			this.height = (this.height * this.scale) / scale;
+			this.scale = scale;
+		}
+	};
+	Acts.prototype.SetHTML = function (text)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.innerHTML = text;
+	};
+	Acts.prototype.AppendHTML = function(param)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		if (cr.is_number(param))
+			param = Math.round(param * 1e10) / 1e10;	// round to nearest ten billionth - hides floating point errors
+		var inner_to_append = param.toString();
+		if (inner_to_append)	// not empty
+			this.elem.innerHTML += inner_to_append;
+	};
+	Acts.prototype.LoadHTML = function (url_, postdata_)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.load = 1;
+		if(postdata_.length) {
+			jQuery.ajax({
+				context: this,
+				dataType: "text",
+				type: "POST",
+				url: url_,
+				data: postdata_,
+				success: function(data) {
+					this.load = 0;
+					this.elem.innerHTML = data;
+					this.runtime.trigger(Cnds.prototype.OnLoad, this);
+				},
+				error: function() {
+					this.load = 0;
+					this.runtime.trigger(Cnds.prototype.OnError, this);
+				}
+			});
+		} else {
+			jQuery.ajax({
+				context: this,
+				dataType: "text",
+				type: "GET",
+				url: url_,
+				success: function(data) {
+					this.load = 0;
+					this.elem.innerHTML = data;
+					this.runtime.trigger(Cnds.prototype.OnLoad, this);
+				},
+				error: function() {
+					this.load = 0;
+					this.runtime.trigger(Cnds.prototype.OnError, this);
+				}
+			});
+		};
+	};
+	Acts.prototype.ScrollTop = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+        this.elem.scrollTop = 0;
+	};
+	Acts.prototype.ScrollBottom = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.scrollTop = this.elem.scrollHeight;
+	};
+	Acts.prototype.Blur = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.blur();
+	};
+	Acts.prototype.Focus = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.focus();
+	};
+	Acts.prototype.SetURL = function (url_)
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.load = 1;
+		this.elem.src = url_;
+		jQuery.ajax({
+			context: this,
+			dataType: "text",
+			type: "GET",
+			url: url_,
+			success: function() {
+				this.elem.onload = (function (self) {
+					return function() {
+						self.runtime.trigger(Cnds.prototype.OnLoad, self);
+					};
+				})(this);
+				this.load = 0;
+			},
+			error: function() {
+				this.elem.onload = (function (self) {
+					return function() {
+						self.runtime.trigger(Cnds.prototype.OnError, self);
+					};
+				})(this);
+				this.load = 0;
+			}
+		});
+	};
+	Acts.prototype.Backward = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.src = this.elem.contentWindow.history.back();
+	};
+	Acts.prototype.Forward = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.src = this.elem.contentWindow.history.forward();
+	};
+	Acts.prototype.Reload = function ()
+	{
+		if (this.runtime.isDomFree)
+			return;
+		this.elem.contentWindow.location.reload();
+	};
+	pluginProto.acts = new Acts();
+	function Exps() {};
+	Exps.prototype.CSSFilename = function (ret)
+	{
+		ret.set_string(this.cssFile);
+	};
+	Exps.prototype.CSS = function (ret)
+	{
+		ret.set_string(this.elem.style.cssText);
+	};
+	Exps.prototype.HTML = function (ret)
+	{
+		if (this.properties[6])
+			ret.set_string(this.elem.innerHTML);
+		else
+			ret.set_string("<html>" + jQuery(this.elem).contents().find("*").html() + "</html>");
+	};
+	Exps.prototype.JSreturn = function (ret)
+	{
+		ret.set_string(jsreturn);
+	};
+	Exps.prototype.URL = function (ret)
+	{
+		if (this.properties[6])
+			this.currentURL = "";
+		else
+			this.currentURL = this.elem.contentWindow.location.href;
+		ret.set_string(this.currentURL);
 	};
 	pluginProto.exps = new Exps();
 }());
@@ -33987,748 +28354,6 @@ cr.plugins_.sliderbar = function(runtime)
 }());
 ;
 ;
-cr.plugins_.video = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var pluginProto = cr.plugins_.video.prototype;
-	pluginProto.Type = function(plugin)
-	{
-		this.plugin = plugin;
-		this.runtime = plugin.runtime;
-	};
-	var typeProto = pluginProto.Type.prototype;
-	typeProto.onCreate = function()
-	{
-	};
-	typeProto.onLostWebGLContext = function ()
-	{
-		if (this.is_family)
-			return;
-		var i, len, inst;
-		for (i = 0, len = this.instances.length; i < len; ++i)
-		{
-			inst = this.instances[i];
-			inst.webGL_texture = null;		// will lazy create again on next draw
-		}
-	};
-	var tmpVideo = document.createElement("video");
-	var can_play_webm = !!tmpVideo.canPlayType("video/webm");
-	var can_play_ogv = !!tmpVideo.canPlayType("video/ogg");
-	var can_play_mp4 = !!tmpVideo.canPlayType("video/mp4");
-	tmpVideo = null;
-	function isVideoPlaying(v)
-	{
-		return v && !v.paused && !v.ended && v.currentTime > 0;
-	};
-	pluginProto.Instance = function(type)
-	{
-		this.type = type;
-		this.runtime = type.runtime;
-	};
-	var instanceProto = pluginProto.Instance.prototype;
-	var playOnNextTouch = [];
-	document.addEventListener("touchend", function ()
-	{
-		var i, len;
-		for (i = 0, len = playOnNextTouch.length; i < len; ++i)
-		{
-			playOnNextTouch[i].play();
-		}
-		cr.clearArray(playOnNextTouch);
-	}, true);
-	instanceProto.queueVideoPlay = function (add)
-	{
-		if (!this.video)
-			return;
-		var i;
-		if (!add)
-		{
-			i = playOnNextTouch.indexOf(this.video);
-			if (i >= 0)
-				playOnNextTouch.splice(i, 1);
-			return;
-		}
-		if (this.isSettingSource > 0)
-		{
-			i = playOnNextTouch.indexOf(this.video);
-			if (i === -1)
-				playOnNextTouch.push(this.video);
-			return;
-		}
-		if (this.useNextTouchWorkaround && !this.runtime.isInUserInputEvent)
-		{
-			i = playOnNextTouch.indexOf(this.video);
-			if (i === -1)
-				playOnNextTouch.push(this.video);
-		}
-		else	// otherwise can play right away
-			this.video.play();
-	};
-	instanceProto.onCreate = function()
-	{
-		this.webm_src = this.properties[0];
-		this.ogv_src = this.properties[1];
-		this.mp4_src = this.properties[2];
-		this.autoplay = this.properties[3];					// 0 = no, 1 = preload, 2 = yes
-		this.playInBackground = (this.properties[4] !== 0);	// 0 = no, 1 = yes
-		this.videoWasPlayingOnSuspend = false;
-		this.video = document.createElement("video");
-		this.video.crossOrigin = "anonymous";
-		this.webGL_texture = null;
-		this.currentTrigger = -1;
-		this.viaCanvas = null;
-		this.viaCtx = null;
-		this.useViaCanvasWorkaround = this.runtime.isIE || this.runtime.isMicrosoftEdge;
-		this.isSettingSource = 0;
-		var self = this;
-		this.video.addEventListener("canplay", function () {
-			self.currentTrigger = 0;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("canplaythrough", function () {
-			self.currentTrigger = 1;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("ended", function () {
-			self.currentTrigger = 2;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("error", function () {
-			self.currentTrigger = 3;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("loadstart", function () {
-			self.currentTrigger = 4;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("playing", function () {
-			self.currentTrigger = 5;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("pause", function () {
-			self.currentTrigger = 6;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.video.addEventListener("stalled", function () {
-			self.currentTrigger = 7;
-			self.runtime.trigger(cr.plugins_.video.prototype.cnds.OnPlaybackEvent, self);
-		});
-		this.useNextTouchWorkaround = ((this.runtime.isiOS || (this.runtime.isAndroid && (this.runtime.isChrome || this.runtime.isAndroidStockBrowser))) && !this.runtime.isCrosswalk && !this.runtime.isDomFree);
-		if (this.autoplay === 0)
-		{
-			this.video.autoplay = false;
-			this.video.preload = "none";
-		}
-		else if (this.autoplay === 1)
-		{
-			this.video.autoplay = false;
-			this.video.preload = "auto";
-		}
-		else if (this.autoplay === 2)
-		{
-			this.video.autoplay = true;
-		}
-		this.setSource(this.webm_src, this.ogv_src, this.mp4_src);
-		if (this.autoplay === 2 && this.useNextTouchWorkaround)
-			this.queueVideoPlay(true);
-		this.useDom = (((this.runtime.isSafari || this.runtime.isWKWebView) && this.runtime.isiOS) && !this.runtime.isDomFree);
-		this.element_hidden = false;
-		if (this.useDom)
-		{
-			jQuery(this.video).appendTo(this.runtime.canvasdiv ? this.runtime.canvasdiv : "body");
-			this.video.addEventListener("contextmenu", function (e) { e.preventDefault(); e.stopPropagation(); return false; }, false);
-			if (this.video.hasAttribute("controls"))
-				this.video.removeAttribute("controls")
-			this.video.setAttribute("webkit-playsinline", "");
-			if (this.properties[5] === 0)		// initially invisible
-			{
-				jQuery(this.video).hide();
-				this.visible = false;
-				this.element_hidden = true;
-			}
-		}
-		else
-		{
-			this.visible = (this.properties[5] !== 0);
-		}
-		this.lastLeft = 0;
-		this.lastTop = 0;
-		this.lastRight = 0;
-		this.lastBottom = 0;
-		this.lastWinWidth = 0;
-		this.lastWinHeight = 0;
-		if (this.useDom)
-			this.updatePosition(true);
-		this.runtime.tickMe(this);
-		if (!this.recycled)
-		{
-			var self = this;
-			this.runtime.addSuspendCallback(function(s)
-			{
-				self.onSuspend(s);
-			});
-		}
-	};
-	instanceProto.onSuspend = function (s)
-	{
-		if (this.playInBackground || !this.video)
-			return;
-		if (s)
-		{
-			if (isVideoPlaying(this.video))
-			{
-				this.queueVideoPlay(false);
-				this.video.pause();
-				this.videoWasPlayingOnSuspend = true;
-			}
-		}
-		else
-		{
-			if (this.videoWasPlayingOnSuspend)
-			{
-				this.queueVideoPlay(true);
-				this.videoWasPlayingOnSuspend = false;
-			}
-		}
-	};
-	instanceProto.setSource = function (webm_src, ogv_src, mp4_src)
-	{
-		var self = this;
-		var useSrc = "";
-		if (can_play_webm && webm_src)
-			useSrc = webm_src.toLowerCase();
-		else if (can_play_ogv && ogv_src)
-			useSrc = ogv_src.toLowerCase();
-		else if (can_play_mp4 && mp4_src)
-			useSrc = mp4_src.toLowerCase();
-		if (useSrc)
-		{
-			if (this.runtime.isWKWebView && !this.runtime.isAbsoluteUrl(useSrc))
-			{
-				this.isSettingSource++;
-				this.runtime.fetchLocalFileViaCordovaAsURL(this.runtime.files_subfolder + useSrc, function (url)
-				{
-					self.isSettingSource--;
-					self.video.src = url;			// load video from blob URL
-				}, function (err)
-				{
-					console.error("[Video] Failed to load video '" + useSrc + "': ", err);
-					self.isSettingSource--;
-					self.video.src = useSrc;		// error loading local video; try to load the original source anyway
-				});
-			}
-			else
-			{
-				this.video.src = useSrc;
-			}
-		}
-		if (this.runtime.glwrap && this.webGL_texture)
-		{
-			this.runtime.glwrap.deleteTexture(this.webGL_texture);
-			this.webGL_texture = null;
-		}
-		this.viaCanvas = null;
-		this.viaCtx = null;
-	};
-	instanceProto.onDestroy = function ()
-	{
-		this.queueVideoPlay(false);
-		if (isVideoPlaying(this.video))
-			this.video.pause();		// stop playback
-		if (this.runtime.glwrap && this.webGL_texture)
-		{
-			this.runtime.glwrap.deleteTexture(this.webGL_texture);
-			this.webGL_texture = null;
-		}
-		if (this.useDom)
-			jQuery(this.video).remove();
-		this.viaCanvas = null;
-		this.viaCtx = null;
-		this.video.src = "";		// memory is not always cleaned up unless we drop the src!
-		this.video = null;
-	};
-	instanceProto.tick = function ()
-	{
-		if (isVideoPlaying(this.video) && !this.useDom)
-			this.runtime.redraw = true;
-		if (this.useDom)
-			this.updatePosition();
-	};
-	instanceProto.updatePosition = function (first)
-	{
-		if (this.runtime.isDomFree || !this.useDom)
-			return;
-		var videoWidth = this.video.videoWidth;
-		var videoHeight = this.video.videoHeight;
-		if (videoWidth <= 0)
-			videoWidth = 320;
-		if (videoHeight <= 0)
-			videoHeight = 240;
-		var videoAspect = videoWidth / videoHeight;
-		var dispWidth = this.width;
-		var dispHeight = this.height;
-		var dispAspect = dispWidth / dispHeight;
-		var offx = 0;
-		var offy = 0;
-		var drawWidth = 0;
-		var drawHeight = 0;
-		if (dispAspect > videoAspect)
-		{
-			drawWidth = dispHeight * videoAspect;
-			drawHeight = dispHeight;
-			offx = Math.floor((dispWidth - drawWidth) / 2);
-			if (offx < 0)
-				offx = 0;
-		}
-		else
-		{
-			drawWidth = dispWidth;
-			drawHeight = dispWidth / videoAspect;
-			offy = Math.floor((dispHeight - drawHeight) / 2);
-			if (offy < 0)
-				offy = 0;
-		}
-		var ax = this.x + offx;
-		var ay = this.y + offy;
-		var left = this.layer.layerToCanvas(ax, ay, true);
-		var top = this.layer.layerToCanvas(ax, ay, false);
-		var right = this.layer.layerToCanvas(ax + drawWidth, ay + drawHeight, true);
-		var bottom = this.layer.layerToCanvas(ax + drawWidth, ay + drawHeight, false);
-		if (!this.visible || !this.layer.visible || right <= 0 || bottom <= 0 || left >= this.runtime.width || top >= this.runtime.height)
-		{
-			if (!this.element_hidden)
-				jQuery(this.video).hide();
-			this.element_hidden = true;
-			return;
-		}
-		if (left < 1)
-			left = 1;
-		if (top < 1)
-			top = 1;
-		if (right >= this.runtime.width)
-			right = this.runtime.width - 1;
-		if (bottom >= this.runtime.height)
-			bottom = this.runtime.height - 1;
-		var curWinWidth = window.innerWidth;
-		var curWinHeight = window.innerHeight;
-		if (!first && this.lastLeft === left && this.lastTop === top && this.lastRight === right && this.lastBottom === bottom && this.lastWinWidth === curWinWidth && this.lastWinHeight === curWinHeight)
-		{
-			if (this.element_hidden)
-			{
-				jQuery(this.video).show();
-				this.element_hidden = false;
-			}
-			if (!this.runtime.isiOS || this.runtime.tickcount % 30 !== 0)
-				return;
-		}
-		this.lastLeft = left;
-		this.lastTop = top;
-		this.lastRight = right;
-		this.lastBottom = bottom;
-		this.lastWinWidth = curWinWidth;
-		this.lastWinHeight = curWinHeight;
-		if (this.element_hidden)
-		{
-			jQuery(this.video).show();
-			this.element_hidden = false;
-		}
-		var offx = Math.round(left) + jQuery(this.runtime.canvas).offset().left;
-		var offy = Math.round(top) + jQuery(this.runtime.canvas).offset().top;
-		jQuery(this.video).css("position", "absolute");
-		jQuery(this.video).offset({left: offx, top: offy});
-		jQuery(this.video).width(Math.round(right - left));
-		jQuery(this.video).height(Math.round(bottom - top));
-	};
-	instanceProto.saveToJSON = function ()
-	{
-		return {
-			"s": (this.video.src || ""),
-			"p": !!isVideoPlaying(this.video),
-			"t": (this.video.currentTime || 0)
-		};
-	};
-	instanceProto.loadFromJSON = function (o)
-	{
-		if (!o || typeof o["s"] === "undefined")
-			return;
-		var src = o["s"];
-		this.setSource(src, src, src);
-		try {
-			this.video.currentTime = o["t"];
-		}
-		catch (e) {};		// ignore if throws
-		if (o["p"])			// is playing
-		{
-			this.queueVideoPlay(true);
-		}
-		else
-		{
-			this.queueVideoPlay(false);
-			this.video.pause();
-		}
-	};
-	instanceProto.draw = function (ctx)
-	{
-		if (!this.video || this.useDom)
-			return;		// no video to draw or using off-canvas DOM element
-		var videoWidth = this.video.videoWidth;
-		var videoHeight = this.video.videoHeight;
-		if (videoWidth <= 0 || videoHeight <= 0)
-			return;		// not yet loaded metadata
-		var videoAspect = videoWidth / videoHeight;
-		var dispWidth = this.width;
-		var dispHeight = this.height;
-		var dispAspect = dispWidth / dispHeight;
-		var offx = 0;
-		var offy = 0;
-		var drawWidth = 0;
-		var drawHeight = 0;
-		if (dispAspect > videoAspect)
-		{
-			drawWidth = dispHeight * videoAspect;
-			drawHeight = dispHeight;
-			offx = Math.floor((dispWidth - drawWidth) / 2);
-			if (offx < 0)
-				offx = 0;
-		}
-		else
-		{
-			drawWidth = dispWidth;
-			drawHeight = dispWidth / videoAspect;
-			offy = Math.floor((dispHeight - drawHeight) / 2);
-			if (offy < 0)
-				offy = 0;
-		}
-		ctx.globalAlpha = this.opacity;
-		ctx.drawImage(this.video, this.x + offx, this.y + offy, drawWidth, drawHeight);
-	};
-	var tmpRect = new cr.rect(0, 0, 0, 0);
-	var tmpQuad = new cr.quad();
-	instanceProto.drawGL = function (glw)
-	{
-		if (!this.video || this.useDom)
-			return;		// no video to draw or using off-canvas DOM element
-		var videoWidth = this.video.videoWidth;
-		var videoHeight = this.video.videoHeight;
-		if (videoWidth <= 0 || videoHeight <= 0)
-			return;		// not yet loaded metadata
-		var videoAspect = videoWidth / videoHeight;
-		var dispWidth = this.width;
-		var dispHeight = this.height;
-		var dispAspect = dispWidth / dispHeight;
-		var offx = 0;
-		var offy = 0;
-		var drawWidth = 0;
-		var drawHeight = 0;
-		if (dispAspect > videoAspect)
-		{
-			drawWidth = dispHeight * videoAspect;
-			drawHeight = dispHeight;
-			offx = Math.floor((dispWidth - drawWidth) / 2);
-			if (offx < 0)
-				offx = 0;
-		}
-		else
-		{
-			drawWidth = dispWidth;
-			drawHeight = dispWidth / videoAspect;
-			offy = Math.floor((dispHeight - drawHeight) / 2);
-			if (offy < 0)
-				offy = 0;
-		}
-		if (!this.webGL_texture)
-		{
-			this.webGL_texture = glw.createEmptyTexture(videoWidth, videoHeight, this.runtime.linearSampling, false, false);
-		}
-		if (this.useViaCanvasWorkaround)
-		{
-			if (!this.viaCtx)
-			{
-				this.viaCanvas = document.createElement("canvas");
-				this.viaCanvas.width = videoWidth;
-				this.viaCanvas.height = videoHeight;
-				this.viaCtx = this.viaCanvas.getContext("2d");
-			}
-			this.viaCtx.drawImage(this.video, 0, 0);
-			glw.videoToTexture(this.viaCanvas, this.webGL_texture);
-		}
-		else
-		{
-			glw.videoToTexture(this.video, this.webGL_texture);
-		}
-		glw.setBlend(this.srcBlend, this.destBlend);
-		glw.setOpacity(this.opacity);
-		glw.setTexture(this.webGL_texture);
-		tmpRect.set(this.x + offx, this.y + offy, this.x + offx + drawWidth, this.y + offy + drawHeight);
-		tmpQuad.set_from_rect(tmpRect);
-		glw.quad(tmpQuad.tlx, tmpQuad.tly, tmpQuad.trx, tmpQuad.try_, tmpQuad.brx, tmpQuad.bry, tmpQuad.blx, tmpQuad.bly);
-	};
-	function dbToLinear_nocap(x)
-	{
-		return Math.pow(10, x / 20);
-	};
-	function linearToDb_nocap(x)
-	{
-		return (Math.log(x) / Math.log(10)) * 20;
-	};
-	function dbToLinear(x)
-	{
-		var v = dbToLinear_nocap(x);
-		if (v < 0)
-			v = 0;
-		if (v > 1)
-			v = 1;
-		return v;
-	};
-	function linearToDb(x)
-	{
-		if (x < 0)
-			x = 0;
-		if (x > 1)
-			x = 1;
-		return linearToDb_nocap(x);
-	};
-	function Cnds() {};
-	Cnds.prototype.IsPlaying = function ()
-	{
-		return isVideoPlaying(this.video);
-	};
-	Cnds.prototype.IsPaused = function ()
-	{
-		return this.video.paused;
-	};
-	Cnds.prototype.HasEnded = function ()
-	{
-		return this.video.ended;
-	};
-	Cnds.prototype.IsMuted = function ()
-	{
-		return this.video.muted;
-	};
-	Cnds.prototype.OnPlaybackEvent = function (trig)
-	{
-		return this.currentTrigger === trig;
-	};
-	pluginProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.SetSource = function (webm_src, ogv_src, mp4_src)
-	{
-		this.setSource(webm_src, ogv_src, mp4_src);
-		this.video.load();
-	};
-	Acts.prototype.SetPlaybackTime = function (s)
-	{
-		try {
-			this.video.currentTime = s;
-		}
-		catch (e)
-		{
-			if (console && console.error)
-				console.error("Exception setting video playback time: ", e);
-		}
-	};
-	Acts.prototype.SetLooping = function (l)
-	{
-		this.video.loop = (l !== 0);
-	};
-	Acts.prototype.SetMuted = function (m)
-	{
-		this.video.muted = (m !== 0);
-	};
-	Acts.prototype.SetVolume = function (v)
-	{
-		this.video.volume = dbToLinear(v);
-	};
-	Acts.prototype.Pause = function ()
-	{
-		this.queueVideoPlay(false);		// remove any play-on-next-touch queue, since we don't want it to be playing any more
-		this.video.pause();
-	};
-	Acts.prototype.Play = function ()
-	{
-		this.queueVideoPlay(true);
-	};
-	pluginProto.acts = new Acts();
-	function Exps() {};
-	Exps.prototype.PlaybackTime = function (ret)
-	{
-		ret.set_float(this.video.currentTime || 0);
-	};
-	Exps.prototype.Duration = function (ret)
-	{
-		ret.set_float(this.video.duration || 0);
-	};
-	Exps.prototype.Volume = function (ret)
-	{
-		ret.set_float(linearToDb(this.video.volume || 0));
-	};
-	pluginProto.exps = new Exps();
-}());
-;
-;
-cr.behaviors.Anchor = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.Anchor.prototype;
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
-	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
-	{
-	};
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;				// associated object instance to modify
-		this.runtime = type.runtime;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.onCreate = function()
-	{
-		this.anch_left = this.properties[0];		// 0 = left, 1 = right, 2 = none
-		this.anch_top = this.properties[1];			// 0 = top, 1 = bottom, 2 = none
-		this.anch_right = this.properties[2];		// 0 = none, 1 = right
-		this.anch_bottom = this.properties[3];		// 0 = none, 1 = bottom
-		this.inst.update_bbox();
-		this.xleft = this.inst.bbox.left;
-		this.ytop = this.inst.bbox.top;
-		this.xright = this.runtime.original_width - this.inst.bbox.left;
-		this.ybottom = this.runtime.original_height - this.inst.bbox.top;
-		this.rdiff = this.runtime.original_width - this.inst.bbox.right;
-		this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
-		this.enabled = (this.properties[4] !== 0);
-	};
-	behinstProto.saveToJSON = function ()
-	{
-		return {
-			"xleft": this.xleft,
-			"ytop": this.ytop,
-			"xright": this.xright,
-			"ybottom": this.ybottom,
-			"rdiff": this.rdiff,
-			"bdiff": this.bdiff,
-			"enabled": this.enabled
-		};
-	};
-	behinstProto.loadFromJSON = function (o)
-	{
-		this.xleft = o["xleft"];
-		this.ytop = o["ytop"];
-		this.xright = o["xright"];
-		this.ybottom = o["ybottom"];
-		this.rdiff = o["rdiff"];
-		this.bdiff = o["bdiff"];
-		this.enabled = o["enabled"];
-	};
-	behinstProto.tick = function ()
-	{
-		if (!this.enabled)
-			return;
-		var n;
-		var layer = this.inst.layer;
-		var inst = this.inst;
-		var bbox = this.inst.bbox;
-		if (this.anch_left === 0)
-		{
-			inst.update_bbox();
-			n = (layer.viewLeft + this.xleft) - bbox.left;
-			if (n !== 0)
-			{
-				inst.x += n;
-				inst.set_bbox_changed();
-			}
-		}
-		else if (this.anch_left === 1)
-		{
-			inst.update_bbox();
-			n = (layer.viewRight - this.xright) - bbox.left;
-			if (n !== 0)
-			{
-				inst.x += n;
-				inst.set_bbox_changed();
-			}
-		}
-		if (this.anch_top === 0)
-		{
-			inst.update_bbox();
-			n = (layer.viewTop + this.ytop) - bbox.top;
-			if (n !== 0)
-			{
-				inst.y += n;
-				inst.set_bbox_changed();
-			}
-		}
-		else if (this.anch_top === 1)
-		{
-			inst.update_bbox();
-			n = (layer.viewBottom - this.ybottom) - bbox.top;
-			if (n !== 0)
-			{
-				inst.y += n;
-				inst.set_bbox_changed();
-			}
-		}
-		if (this.anch_right === 1)
-		{
-			inst.update_bbox();
-			n = (layer.viewRight - this.rdiff) - bbox.right;
-			if (n !== 0)
-			{
-				inst.width += n;
-				if (inst.width < 0)
-					inst.width = 0;
-				inst.set_bbox_changed();
-			}
-		}
-		if (this.anch_bottom === 1)
-		{
-			inst.update_bbox();
-			n = (layer.viewBottom - this.bdiff) - bbox.bottom;
-			if (n !== 0)
-			{
-				inst.height += n;
-				if (inst.height < 0)
-					inst.height = 0;
-				inst.set_bbox_changed();
-			}
-		}
-	};
-	function Cnds() {};
-	behaviorProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.SetEnabled = function (e)
-	{
-		if (this.enabled && e === 0)
-			this.enabled = false;
-		else if (!this.enabled && e !== 0)
-		{
-			this.inst.update_bbox();
-			this.xleft = this.inst.bbox.left;
-			this.ytop = this.inst.bbox.top;
-			this.xright = this.runtime.original_width - this.inst.bbox.left;
-			this.ybottom = this.runtime.original_height - this.inst.bbox.top;
-			this.rdiff = this.runtime.original_width - this.inst.bbox.right;
-			this.bdiff = this.runtime.original_height - this.inst.bbox.bottom;
-			this.enabled = true;
-		}
-	};
-	behaviorProto.acts = new Acts();
-	function Exps() {};
-	behaviorProto.exps = new Exps();
-}());
-;
-;
 cr.behaviors.Bullet = function(runtime)
 {
 	this.runtime = runtime;
@@ -34919,17 +28544,14 @@ cr.behaviors.Bullet = function(runtime)
 			this.lastKnownAngle = bounceAngle;
 			this.inst.set_bbox_changed();
 		}
-		if (s !== 0)		// prevent divide-by-zero
+		if (this.bounceOffSolid)
 		{
-			if (this.bounceOffSolid)
-			{
-				if (!this.runtime.pushOutSolid(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30)))
-					this.runtime.pushOutSolidNearest(this.inst, 100);
-			}
-			else
-			{
-				this.runtime.pushOut(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30), otherinst)
-			}
+			if (!this.runtime.pushOutSolid(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30)))
+				this.runtime.pushOutSolidNearest(this.inst, 100);
+		}
+		else if (s !== 0)
+		{
+			this.runtime.pushOut(this.inst, this.dx / s, this.dy / s, Math.max(s * 2.5 * dt, 30), otherinst)
 		}
 	};
 	Acts.prototype.SetDistanceTravelled = function (d)
@@ -34960,408 +28582,6 @@ cr.behaviors.Bullet = function(runtime)
 	{
 		ret.set_float(this.travelled);
 	};
-	Exps.prototype.Gravity = function (ret)
-	{
-		ret.set_float(this.g);
-	};
-	behaviorProto.exps = new Exps();
-}());
-;
-;
-cr.behaviors.DragnDrop = function(runtime)
-{
-	this.runtime = runtime;
-	var self = this;
-	if (!this.runtime.isDomFree)
-	{
-		jQuery(document).mousemove(
-			function(info) {
-				self.onMouseMove(info);
-			}
-		);
-		jQuery(document).mousedown(
-			function(info) {
-				self.onMouseDown(info);
-			}
-		);
-		jQuery(document).mouseup(
-			function(info) {
-				self.onMouseUp(info);
-			}
-		);
-	}
-	var elem = (this.runtime.fullscreen_mode > 0) ? document : this.runtime.canvas;
-	if (this.runtime.isDirectCanvas)
-		elem = window["Canvas"];
-	else if (this.runtime.isCocoonJs)
-		elem = window;
-	if (typeof PointerEvent !== "undefined")
-	{
-		elem.addEventListener("pointerdown",
-			function(info) {
-				self.onPointerStart(info);
-			},
-			false
-		);
-		elem.addEventListener("pointermove",
-			function(info) {
-				self.onPointerMove(info);
-			},
-			false
-		);
-		elem.addEventListener("pointerup",
-			function(info) {
-				self.onPointerEnd(info);
-			},
-			false
-		);
-		elem.addEventListener("pointercancel",
-			function(info) {
-				self.onPointerEnd(info);
-			},
-			false
-		);
-	}
-	else if (window.navigator["msPointerEnabled"])
-	{
-		elem.addEventListener("MSPointerDown",
-			function(info) {
-				self.onPointerStart(info);
-			},
-			false
-		);
-		elem.addEventListener("MSPointerMove",
-			function(info) {
-				self.onPointerMove(info);
-			},
-			false
-		);
-		elem.addEventListener("MSPointerUp",
-			function(info) {
-				self.onPointerEnd(info);
-			},
-			false
-		);
-		elem.addEventListener("MSPointerCancel",
-			function(info) {
-				self.onPointerEnd(info);
-			},
-			false
-		);
-	}
-	else
-	{
-		elem.addEventListener("touchstart",
-			function(info) {
-				self.onTouchStart(info);
-			},
-			false
-		);
-		elem.addEventListener("touchmove",
-			function(info) {
-				self.onTouchMove(info);
-			},
-			false
-		);
-		elem.addEventListener("touchend",
-			function(info) {
-				self.onTouchEnd(info);
-			},
-			false
-		);
-		elem.addEventListener("touchcancel",
-			function(info) {
-				self.onTouchEnd(info);
-			},
-			false
-		);
-	}
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.DragnDrop.prototype;
-	var dummyoffset = {left: 0, top: 0};
-	function GetDragDropBehavior(inst)
-	{
-		var i, len;
-		for (i = 0, len = inst.behavior_insts.length; i < len; i++)
-		{
-			if (inst.behavior_insts[i] instanceof behaviorProto.Instance)
-				return inst.behavior_insts[i];
-		}
-		return null;
-	};
-	behaviorProto.onMouseDown = function (info)
-	{
-		if (info.which !== 1)
-			return;		// not left mouse button
-		this.onInputDown("leftmouse", info.pageX, info.pageY);
-	};
-	behaviorProto.onMouseMove = function (info)
-	{
-		if (info.which !== 1)
-			return;		// not left mouse button
-		this.onInputMove("leftmouse", info.pageX, info.pageY);
-	};
-	behaviorProto.onMouseUp = function (info)
-	{
-		if (info.which !== 1)
-			return;		// not left mouse button
-		this.onInputUp("leftmouse");
-	};
-	behaviorProto.onTouchStart = function (info)
-	{
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		var i, len, t, id;
-		for (i = 0, len = info.changedTouches.length; i < len; i++)
-		{
-			t = info.changedTouches[i];
-			id = t.identifier;
-			this.onInputDown(id ? id.toString() : "<none>", t.pageX, t.pageY);
-		}
-	};
-	behaviorProto.onTouchMove = function (info)
-	{
-		if (info.preventDefault)
-			info.preventDefault();
-		var i, len, t, id;
-		for (i = 0, len = info.changedTouches.length; i < len; i++)
-		{
-			t = info.changedTouches[i];
-			id = t.identifier;
-			this.onInputMove(id ? id.toString() : "<none>", t.pageX, t.pageY);
-		}
-	};
-	behaviorProto.onTouchEnd = function (info)
-	{
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		var i, len, t, id;
-		for (i = 0, len = info.changedTouches.length; i < len; i++)
-		{
-			t = info.changedTouches[i];
-			id = t.identifier;
-			this.onInputUp(id ? id.toString() : "<none>");
-		}
-	};
-	behaviorProto.onPointerStart = function (info)
-	{
-		if (info["pointerType"] === info["MSPOINTER_TYPE_MOUSE"] || info["pointerType"] === "mouse")
-			return;
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		this.onInputDown(info["pointerId"].toString(), info.pageX, info.pageY);
-	};
-	behaviorProto.onPointerMove = function (info)
-	{
-		if (info["pointerType"] === info["MSPOINTER_TYPE_MOUSE"] || info["pointerType"] === "mouse")
-			return;
-		if (info.preventDefault)
-			info.preventDefault();
-		this.onInputMove(info["pointerId"].toString(), info.pageX, info.pageY);
-	};
-	behaviorProto.onPointerEnd = function (info)
-	{
-		if (info["pointerType"] === info["MSPOINTER_TYPE_MOUSE"] || info["pointerType"] === "mouse")
-			return;
-		if (info.preventDefault && cr.isCanvasInputEvent(info))
-			info.preventDefault();
-		this.onInputUp(info["pointerId"].toString());
-	};
-	behaviorProto.onInputDown = function (src, pageX, pageY)
-	{
-		var offset = this.runtime.isDomFree ? dummyoffset : jQuery(this.runtime.canvas).offset();
-		var x = pageX - offset.left;
-		var y = pageY - offset.top;
-		var lx, ly, topx, topy;
-		var arr = this.my_instances.valuesRef();
-		var i, len, b, inst, topmost = null;
-		for (i = 0, len = arr.length; i < len; i++)
-		{
-			inst = arr[i];
-			b = GetDragDropBehavior(inst);
-			if (!b.enabled || b.dragging)
-				continue;		// don't consider disabled or already-dragging instances
-			lx = inst.layer.canvasToLayer(x, y, true);
-			ly = inst.layer.canvasToLayer(x, y, false);
-			inst.update_bbox();
-			if (!inst.contains_pt(lx, ly))
-				continue;		// don't consider instances not over this point
-			if (!topmost)
-			{
-				topmost = inst;
-				topx = lx;
-				topy = ly;
-				continue;
-			}
-			if (inst.layer.index > topmost.layer.index)
-			{
-				topmost = inst;
-				topx = lx;
-				topy = ly;
-				continue;
-			}
-			if (inst.layer.index === topmost.layer.index && inst.get_zindex() > topmost.get_zindex())
-			{
-				topmost = inst;
-				topx = lx;
-				topy = ly;
-				continue;
-			}
-		}
-		if (topmost)
-			GetDragDropBehavior(topmost).onDown(src, topx, topy);
-	};
-	behaviorProto.onInputMove = function (src, pageX, pageY)
-	{
-		var offset = this.runtime.isDomFree ? dummyoffset : jQuery(this.runtime.canvas).offset();
-		var x = pageX - offset.left;
-		var y = pageY - offset.top;
-		var lx, ly;
-		var arr = this.my_instances.valuesRef();
-		var i, len, b, inst;
-		for (i = 0, len = arr.length; i < len; i++)
-		{
-			inst = arr[i];
-			b = GetDragDropBehavior(inst);
-			if (!b.enabled || !b.dragging || (b.dragging && b.dragsource !== src))
-				continue;		// don't consider disabled, not-dragging, or dragging by other sources
-			lx = inst.layer.canvasToLayer(x, y, true);
-			ly = inst.layer.canvasToLayer(x, y, false);
-			b.onMove(lx, ly);
-		}
-	};
-	behaviorProto.onInputUp = function (src)
-	{
-		var arr = this.my_instances.valuesRef();
-		var i, len, b, inst;
-		for (i = 0, len = arr.length; i < len; i++)
-		{
-			inst = arr[i];
-			b = GetDragDropBehavior(inst);
-			if (b.dragging && b.dragsource === src)
-				b.onUp();
-		}
-	};
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
-	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
-	{
-	};
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;				// associated object instance to modify
-		this.runtime = type.runtime;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.onCreate = function()
-	{
-		this.dragging = false;
-		this.dx = 0;
-		this.dy = 0;
-		this.dragsource = "<none>";
-		this.axes = this.properties[0];
-		this.enabled = (this.properties[1] !== 0);
-	};
-	behinstProto.saveToJSON = function ()
-	{
-		return { "enabled": this.enabled };
-	};
-	behinstProto.loadFromJSON = function (o)
-	{
-		this.enabled = o["enabled"];
-		this.dragging = false;
-	};
-	behinstProto.onDown = function(src, x, y)
-	{
-		this.dx = x - this.inst.x;
-		this.dy = y - this.inst.y;
-		this.dragging = true;
-		this.dragsource = src;
-		this.runtime.isInUserInputEvent = true;
-		this.runtime.trigger(cr.behaviors.DragnDrop.prototype.cnds.OnDragStart, this.inst);
-		this.runtime.isInUserInputEvent = false;
-	};
-	behinstProto.onMove = function(x, y)
-	{
-		var newx = x - this.dx;
-		var newy = y - this.dy;
-		if (this.axes === 0)		// both
-		{
-			if (this.inst.x !== newx || this.inst.y !== newy)
-			{
-				this.inst.x = newx;
-				this.inst.y = newy;
-				this.inst.set_bbox_changed();
-			}
-		}
-		else if (this.axes === 1)	// horizontal
-		{
-			if (this.inst.x !== newx)
-			{
-				this.inst.x = newx;
-				this.inst.set_bbox_changed();
-			}
-		}
-		else if (this.axes === 2)	// vertical
-		{
-			if (this.inst.y !== newy)
-			{
-				this.inst.y = newy;
-				this.inst.set_bbox_changed();
-			}
-		}
-	};
-	behinstProto.onUp = function()
-	{
-		this.dragging = false;
-		this.runtime.isInUserInputEvent = true;
-		this.runtime.trigger(cr.behaviors.DragnDrop.prototype.cnds.OnDrop, this.inst);
-		this.runtime.isInUserInputEvent = false;
-	};
-	behinstProto.tick = function ()
-	{
-	};
-	function Cnds() {};
-	Cnds.prototype.IsDragging = function ()
-	{
-		return this.dragging;
-	};
-	Cnds.prototype.OnDragStart = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.OnDrop = function ()
-	{
-		return true;
-	};
-	Cnds.prototype.IsEnabled = function ()
-	{
-		return !!this.enabled;
-	};
-	behaviorProto.cnds = new Cnds();
-	function Acts() {};
-	Acts.prototype.SetEnabled = function (s)
-	{
-		this.enabled = (s !== 0);
-		if (!this.enabled)
-			this.dragging = false;
-	};
-	Acts.prototype.Drop = function ()
-	{
-		if (this.dragging)
-			this.onUp();
-	};
-	behaviorProto.acts = new Acts();
-	function Exps() {};
 	behaviorProto.exps = new Exps();
 }());
 ;
@@ -35644,10 +28864,7 @@ cr.behaviors.EightDir = function(runtime)
 			collobj = this.runtime.testOverlapSolid(this.inst);
 			if (collobj)
 			{
-				if (!this.runtime.pushOutSolid(this.inst, (this.dx < 0 ? 1 : -1), 0, Math.abs(Math.floor(this.dx * dt))))
-				{
-					this.inst.x = oldx;
-				}
+				this.inst.x = oldx;
 				this.dx = 0;
 				this.inst.set_bbox_changed();
 				this.runtime.registerCollision(this.inst, collobj);
@@ -35657,17 +28874,14 @@ cr.behaviors.EightDir = function(runtime)
 			collobj = this.runtime.testOverlapSolid(this.inst);
 			if (collobj)
 			{
-				if (!this.runtime.pushOutSolid(this.inst, 0, (this.dy < 0 ? 1 : -1), Math.abs(Math.floor(this.dy * dt))))
-				{
-					this.inst.y = oldy;
-				}
+				this.inst.y = oldy;
 				this.dy = 0;
 				this.inst.set_bbox_changed();
 				this.runtime.registerCollision(this.inst, collobj);
 			}
 			ax = cr.round6dp(this.dx);
 			ay = cr.round6dp(this.dy);
-			if ((ax !== 0 || ay !== 0) && this.inst.type.plugin.is_rotatable)
+			if (ax !== 0 || ay !== 0)
 			{
 				if (this.angleMode === 1)	// 90 degree intervals
 					this.inst.angle = cr.to_clamped_radians(Math.round(cr.to_degrees(Math.atan2(ay, ax)) / 90.0) * 90.0);
@@ -35692,8 +28906,7 @@ cr.behaviors.EightDir = function(runtime)
 	function Cnds() {};
 	Cnds.prototype.IsMoving = function ()
 	{
-		var speed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
-		return speed > 1e-10;
+		return this.dx !== 0 || this.dy !== 0;
 	};
 	Cnds.prototype.CompareSpeed = function (cmp, s)
 	{
@@ -36047,8 +29260,6 @@ cr.behaviors.Flash = function(runtime)
 		this.stage = o["stage"];
 		this.stagetimeleft = o["stagetimeleft"];
 		this.timeleft = o["timeleft"];
-		if (this.timeleft === null)
-			this.timeleft = Infinity;
 	};
 	behinstProto.tick = function ()
 	{
@@ -48499,8 +41710,7 @@ cr.behaviors.Platform = function(runtime)
 		this.inst.x += this.downx;
 		this.inst.y += this.downy;
 		this.inst.set_bbox_changed();
-		if (this.lastFloorObject && this.runtime.testOverlap(this.inst, this.lastFloorObject) &&
-			(!this.runtime.typeHasBehavior(this.lastFloorObject.type, cr.behaviors.solid) || this.lastFloorObject.extra["solidEnabled"]))
+		if (this.lastFloorObject && this.runtime.testOverlap(this.inst, this.lastFloorObject))
 		{
 			this.inst.x = oldx;
 			this.inst.y = oldy;
@@ -48601,14 +41811,6 @@ cr.behaviors.Platform = function(runtime)
 			if (this.inst.extra["inputPredicted"])
 			{
 				this.runtime.pushOutSolid(this.inst, -this.downx, -this.downy, 10, false);
-			}
-			else if (this.runtime.pushOutSolidAxis(this.inst, this.rightx, this.righty, this.inst.width / 2))
-			{
-				this.runtime.registerCollision(this.inst, collobj);
-			}
-			else if (this.runtime.pushOutSolidAxis(this.inst, this.downx, this.downy, this.inst.height / 2))
-			{
-				this.runtime.registerCollision(this.inst, collobj);
 			}
 			else if (this.runtime.pushOutSolidNearest(this.inst, Math.max(this.inst.width, this.inst.height) / 2))
 			{
@@ -48928,7 +42130,7 @@ cr.behaviors.Platform = function(runtime)
 			this.runtime.trigger(cr.behaviors.Platform.prototype.cnds.OnFall, this.inst);
 			this.animMode = ANIMMODE_FALLING;
 		}
-		if ((floor_ || landed) && this.dy >= 0)
+		if (floor_ || landed)
 		{
 			if (this.animMode === ANIMMODE_FALLING || landed || (jump && this.dy === 0))
 			{
@@ -49006,6 +42208,16 @@ cr.behaviors.Platform = function(runtime)
 		var ret = false;
 		var oldx = this.inst.x;
 		var oldy = this.inst.y;
+		this.inst.x -= this.downx * 3;
+		this.inst.y -= this.downy * 3;
+		this.inst.set_bbox_changed();
+		if (this.runtime.testOverlapSolid(this.inst))
+		{
+			this.inst.x = oldx;
+			this.inst.y = oldy;
+			this.inst.set_bbox_changed();
+			return false;
+		}
 		if (side === 0)		// left
 		{
 			this.inst.x -= this.rightx * 2;
@@ -49016,16 +42228,6 @@ cr.behaviors.Platform = function(runtime)
 			this.inst.x += this.rightx * 2;
 			this.inst.y += this.righty * 2;
 		}
-		this.inst.set_bbox_changed();
-		if (!this.runtime.testOverlapSolid(this.inst))
-		{
-			this.inst.x = oldx;
-			this.inst.y = oldy;
-			this.inst.set_bbox_changed();
-			return false;
-		}
-		this.inst.x -= this.downx * 3;
-		this.inst.y -= this.downy * 3;
 		this.inst.set_bbox_changed();
 		ret = this.runtime.testOverlapSolid(this.inst);
 		this.inst.x = oldx;
@@ -49229,181 +42431,6 @@ cr.behaviors.Platform = function(runtime)
 }());
 ;
 ;
-cr.behaviors.Rex_pin2imgpt = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.Rex_pin2imgpt.prototype;
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
-	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
-	{
-	    if (!cr.plugins_.Sprite)
-	    {
-	        this.imgptX_get = null;
-	        this.imgptY_get = null;
-	    }
-	    else
-	    {
-	        this.imgptX_get = cr.plugins_.Sprite.prototype.exps.ImagePointX;
-	        this.imgptY_get = cr.plugins_.Sprite.prototype.exps.ImagePointY;
-	    }
-	};
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;
-		this.runtime = type.runtime;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.onCreate = function()
-	{
-		this.pinObject = null;
-		this.pinObjectUid = -1;		// for loading
-		this.imgpt = null;
-		this.myStartAngle = 0;
-		this.theirStartAngle = 0;
-		this.lastKnownAngle = 0;
-		this.mode = null;
-		var self = this;
-		if (!this.recycled)
-		{
-			this.myDestroyCallback = (function(inst) {
-													self.onInstanceDestroyed(inst);
-												});
-		}
-		this.runtime.addDestroyCallback(this.myDestroyCallback);
-	};
-	behinstProto.saveToJSON = function ()
-	{
-		return {
-			"uid": this.pinObject ? this.pinObject.uid : -1,
-			"imgpt": this.imgpt,
-			"msa": this.myStartAngle,
-			"tsa": this.theirStartAngle,
-			"lka": this.lastKnownAngle,
-			"m": this.mode
-		};
-	};
-	behinstProto.loadFromJSON = function (o)
-	{
-		this.pinObjectUid = o["uid"];		// wait until afterLoad to look up
-		this.imgpt = o["imgpt"];
-		this.myStartAngle = o["msa"];
-		this.theirStartAngle = o["tsa"];
-		this.lastKnownAngle = o["lka"];
-		this.mode = o["m"];
-	};
-	behinstProto.afterLoad = function ()
-	{
-		if (this.pinObjectUid === -1)
-			this.pinObject = null;
-		else
-		{
-			this.pinObject = this.runtime.getObjectByUID(this.pinObjectUid);
-;
-		}
-		this.pinObjectUid = -1;
-	};
-	behinstProto.onInstanceDestroyed = function (inst)
-	{
-		if (this.pinObject == inst)
-			this.pinObject = null;
-	};
-	behinstProto.onDestroy = function()
-	{
-		this.pinObject = null;
-		this.runtime.removeDestroyCallback(this.myDestroyCallback);
-	};
-	behinstProto.tick = function ()
-	{
-	};
-	var fake_ret = {value:0,
-	                set_any: function(value){this.value=value;},
-	                set_int: function(value){this.value=value;},
-                    set_float: function(value){this.value=value;},
-                    set_string: function(value){this.value=value;},
-	               };
-    behinstProto.imgptX_get = function (pinObject, imgpt)
-    {
-        this.type.imgptX_get.call(pinObject, fake_ret, imgpt);
-        return fake_ret.value;
-    };
-    behinstProto.imgptY_get = function (pinObject, imgpt)
-    {
-        this.type.imgptY_get.call(pinObject, fake_ret, imgpt);
-        return fake_ret.value;
-    };
-	behinstProto.tick2 = function ()
-	{
-		if ((!this.pinObject) || (!this.type.imgptX_get) || (!this.type.imgptY_get))
-			return;
-		var newx = this.imgptX_get(this.pinObject, this.imgpt);
-		var newy = this.imgptY_get(this.pinObject, this.imgpt);
-		if (this.inst.x !== newx || this.inst.y !== newy)
-		{
-			this.inst.x = newx;
-			this.inst.y = newy;
-			this.inst.set_bbox_changed();
-		}
-		if (this.mode == 1)
-		{
-		    if (this.lastKnownAngle !== this.inst.angle)
-		    {
-			    this.myStartAngle = cr.clamp_angle(this.myStartAngle + (this.inst.angle - this.lastKnownAngle));
-			}
-		    var newangle = cr.clamp_angle(this.myStartAngle + (this.pinObject.angle - this.theirStartAngle));
-		    this.lastKnownAngle = newangle;
-    	}
-		if ((this.mode == 1) && (this.inst.angle !== newangle))
-		{
-			this.inst.angle = newangle;
-			this.inst.set_bbox_changed();
-		}
-	};
-	function Cnds() {};
-	behaviorProto.cnds = new Cnds();
-	Cnds.prototype.IsPinned = function ()
-	{
-		return !!this.pinObject;
-	};
-	function Acts() {};
-	behaviorProto.acts = new Acts();
-	Acts.prototype.Pin = function (obj, imgpt, mode_)
-	{
-		if (!obj)
-			return;
-		var otherinst = obj.getFirstPicked(this.inst);
-		if (!otherinst)
-			return;
-		this.pinObject = otherinst;
-        this.imgpt = imgpt;
-		this.myStartAngle = this.inst.angle;
-		this.lastKnownAngle = this.inst.angle;
-		this.theirStartAngle = otherinst.angle;
-        this.mode = mode_;
-	};
-	Acts.prototype.Unpin = function ()
-	{
-		this.pinObject = null;
-	};
-	function Exps() {};
-	behaviorProto.exps = new Exps();
-	Exps.prototype.PinnedUID = function (ret)
-	{
-		ret.set_int(this.pinObject ? this.pinObject.uid : -1);
-	};
-}());
-;
-;
 cr.behaviors.Rotate = function(runtime)
 {
 	this.runtime = runtime;
@@ -49532,8 +42559,6 @@ cr.behaviors.Sin = function(runtime)
 		this.initialValue = 0;
 		this.initialValue2 = 0;
 		this.ratio = 0;
-		if (this.movement === 5)			// angle
-			this.mag = cr.to_radians(this.mag);
 		this.init();
 	};
 	behinstProto.saveToJSON = function ()
@@ -49587,6 +42612,7 @@ cr.behaviors.Sin = function(runtime)
 			break;
 		case 5:		// angle
 			this.initialValue = this.inst.angle;
+			this.mag = cr.to_radians(this.mag);		// convert magnitude from degrees to radians
 			break;
 		case 6:		// opacity
 			this.initialValue = this.inst.opacity;
@@ -49638,10 +42664,6 @@ cr.behaviors.Sin = function(runtime)
 			this.i += (dt / this.period) * _2pi;
 			this.i = this.i % _2pi;
 		}
-		this.updateFromPhase();
-	};
-	behinstProto.updateFromPhase = function ()
-	{
 		switch (this.movement) {
 		case 0:		// horizontal
 			if (this.inst.x !== this.lastKnownValue)
@@ -49748,7 +42770,7 @@ cr.behaviors.Sin = function(runtime)
 	};
 	Acts.prototype.SetMovement = function (m)
 	{
-		if (this.movement === 5 && m !== 5)
+		if (this.movement === 5)
 			this.mag = cr.to_degrees(this.mag);
 		this.movement = m;
 		this.init();
@@ -49760,7 +42782,6 @@ cr.behaviors.Sin = function(runtime)
 	Acts.prototype.SetPhase = function (x)
 	{
 		this.i = (x * _2pi) % _2pi;
-		this.updateFromPhase();
 	};
 	Acts.prototype.UpdateInitialState = function ()
 	{
@@ -50083,7 +43104,7 @@ cr.behaviors.Turret = function(runtime)
 				inst.set_bbox_changed();
 			}
 			if ((this.fireTimeCount >= this.rateOfFire) &&
-				(!this.rotateEnabled || cr.to_degrees(cr.angleDiff(inst.angle, targetAngle)) <= 0.1) &&
+				cr.to_degrees(cr.angleDiff(inst.angle, targetAngle)) <= 0.1 &&
 				(!this.predictiveAim || this.speedsCount >= 4))
 			{
 				this.fireTimeCount -= this.rateOfFire;
@@ -50091,11 +43112,8 @@ cr.behaviors.Turret = function(runtime)
 					this.fireTimeCount = 0;
 				this.runtime.trigger(cr.behaviors.Turret.prototype.cnds.OnShoot, this.inst);
 			}
-			if (this.currentTarget)
-			{
-				this.oldTargetX = this.currentTarget.x;
-				this.oldTargetY = this.currentTarget.y;
-			}
+			this.oldTargetX = this.currentTarget.x;
+			this.oldTargetY = this.currentTarget.y;
 			this.firstTickWithTarget = false;
 		}
 		if (this.fireTimeCount > this.rateOfFire)
@@ -50457,434 +43475,310 @@ cr.behaviors.solid = function(runtime)
 	};
 	behaviorProto.acts = new Acts();
 }());
-;
-;
-cr.behaviors.wrap = function(runtime)
-{
-	this.runtime = runtime;
-};
-(function ()
-{
-	var behaviorProto = cr.behaviors.wrap.prototype;
-	behaviorProto.Type = function(behavior, objtype)
-	{
-		this.behavior = behavior;
-		this.objtype = objtype;
-		this.runtime = behavior.runtime;
-	};
-	var behtypeProto = behaviorProto.Type.prototype;
-	behtypeProto.onCreate = function()
-	{
-	};
-	behaviorProto.Instance = function(type, inst)
-	{
-		this.type = type;
-		this.behavior = type.behavior;
-		this.inst = inst;				// associated object instance to modify
-		this.runtime = type.runtime;
-	};
-	var behinstProto = behaviorProto.Instance.prototype;
-	behinstProto.onCreate = function()
-	{
-		this.mode = this.properties[0];		// 0 = wrap to layout, 1 = wrap to viewport
-	};
-	behinstProto.tick = function ()
-	{
-		var inst = this.inst;
-		inst.update_bbox();
-		var bbox = inst.bbox;
-		var layer = inst.layer;
-		var layout = layer.layout;
-		var lbound = 0, rbound = 0, tbound = 0, bbound = 0;
-		if (this.mode === 0)
-		{
-			rbound = layout.width;
-			bbound = layout.height;
-		}
-		else
-		{
-			lbound = layer.viewLeft;
-			rbound = layer.viewRight;
-			tbound = layer.viewTop;
-			bbound = layer.viewBottom;
-		}
-		if (bbox.right < lbound)
-		{
-			inst.x = (rbound - 1) + (inst.x - bbox.left);
-			inst.set_bbox_changed();
-		}
-		else if (bbox.left > rbound)
-		{
-			inst.x = (lbound + 1) - (bbox.right - inst.x);
-			inst.set_bbox_changed();
-		}
-		else if (bbox.bottom < tbound)
-		{
-			inst.y = (bbound - 1) + (inst.y - bbox.top);
-			inst.set_bbox_changed();
-		}
-		else if (bbox.top > bbound)
-		{
-			inst.y = (tbound + 1) - (bbox.bottom - inst.y);
-			inst.set_bbox_changed();
-		}
-	};
-}());
 cr.getObjectRefTable = function () { return [
-	cr.plugins_.AJAX,
 	cr.plugins_.Arr,
 	cr.plugins_.Audio,
 	cr.plugins_.Browser,
-	cr.plugins_.gamepad,
+	cr.plugins_.Button,
 	cr.plugins_.Function,
-	cr.plugins_.NodeWebkit,
-	cr.plugins_.Spriter,
+	cr.plugins_.gamepad,
+	cr.plugins_.htmlCODE,
 	cr.plugins_.Keyboard,
+	cr.plugins_.List,
 	cr.plugins_.LocalStorage,
 	cr.plugins_.Mouse,
+	cr.plugins_.NodeWebkit,
 	cr.plugins_.Particles,
-	cr.plugins_.List,
-	cr.plugins_.TiledBg,
-	cr.plugins_.Sprite,
 	cr.plugins_.Spritefont2,
+	cr.plugins_.Sprite,
 	cr.plugins_.Text,
-	cr.plugins_.WebStorage,
-	cr.plugins_.Steam4C2,
 	cr.plugins_.Touch,
+	cr.plugins_.TiledBg,
+	cr.plugins_.WebStorage,
 	cr.plugins_.sliderbar,
-	cr.plugins_.video,
 	cr.behaviors.Platform,
-	cr.behaviors.Physics,
-	cr.behaviors.solid,
-	cr.behaviors.Sin,
-	cr.behaviors.jumpthru,
-	cr.behaviors.Persist,
-	cr.behaviors.Pin,
-	cr.behaviors.Flash,
+	cr.behaviors.scrollto,
 	cr.behaviors.Bullet,
+	cr.behaviors.Pin,
+	cr.behaviors.EightDir,
+	cr.behaviors.Physics,
+	cr.behaviors.jumpthru,
+	cr.behaviors.solid,
+	cr.behaviors.Persist,
+	cr.behaviors.Flash,
 	cr.behaviors.Rotate,
 	cr.behaviors.Fade,
-	cr.behaviors.Rex_pin2imgpt,
-	cr.behaviors.scrollto,
-	cr.behaviors.EightDir,
+	cr.behaviors.Sin,
 	cr.behaviors.destroy,
-	cr.behaviors.DragnDrop,
-	cr.behaviors.wrap,
-	cr.behaviors.Anchor,
 	cr.behaviors.Turret,
-	cr.system_object.prototype.cnds.OnLayoutStart,
-	cr.behaviors.Pin.prototype.acts.Pin,
-	cr.system_object.prototype.acts.SetLayerEffectEnabled,
 	cr.system_object.prototype.cnds.IsGroupActive,
-	cr.plugins_.Sprite.prototype.cnds.OnCollision,
-	cr.plugins_.Sprite.prototype.cnds.CompareY,
-	cr.plugins_.Sprite.prototype.exps.Y,
-	cr.behaviors.Sin.prototype.cnds.IsActive,
-	cr.system_object.prototype.cnds.CompareVar,
-	cr.behaviors.Flash.prototype.cnds.IsFlashing,
-	cr.system_object.prototype.acts.Wait,
-	cr.behaviors.Sin.prototype.acts.SetActive,
-	cr.behaviors.Platform.prototype.acts.SetVectorY,
-	cr.behaviors.Sin.prototype.acts.SetPhase,
-	cr.plugins_.Sprite.prototype.acts.SetHeight,
-	cr.behaviors.Sin.prototype.acts.SetMagnitude,
-	cr.plugins_.Spriter.prototype.cnds.CompareAnimation,
-	cr.plugins_.Spriter.prototype.cnds.CompareCurrentTime,
-	cr.system_object.prototype.cnds.TriggerOnce,
-	cr.system_object.prototype.acts.SetVar,
-	cr.system_object.prototype.acts.SetGroupActive,
-	cr.plugins_.Audio.prototype.acts.PlayByName,
-	cr.system_object.prototype.acts.SetLayerEffectParam,
-	cr.behaviors.Turret.prototype.acts.SetRange,
-	cr.plugins_.Function.prototype.acts.CallFunction,
-	cr.plugins_.Function.prototype.cnds.OnFunction,
-	cr.plugins_.Spriter.prototype.acts.associateTypeWithName,
-	cr.plugins_.Spriter.prototype.acts.SetInstanceVar,
-	cr.plugins_.Sprite.prototype.exps.UID,
-	cr.plugins_.Spriter.prototype.acts.setObjectScaleRatio,
-	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
-	cr.plugins_.Sprite.prototype.acts.SetEffectParam,
-	cr.behaviors.Rex_pin2imgpt.prototype.acts.Pin,
-	cr.plugins_.Particles.prototype.acts.SetAngle,
-	cr.plugins_.Particles.prototype.acts.ZMoveToObject,
-	cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.Sprite.prototype.acts.Spawn,
-	cr.plugins_.Sprite.prototype.acts.SetAngle,
-	cr.plugins_.Sprite.prototype.acts.ZMoveToObject,
-	cr.plugins_.Spriter.prototype.cnds.isMirrored,
-	cr.plugins_.Audio.prototype.acts.Stop,
-	cr.plugins_.Sprite.prototype.acts.Destroy,
-	cr.system_object.prototype.cnds.Else,
-	cr.system_object.prototype.acts.CreateObject,
-	cr.behaviors.Bullet.prototype.acts.SetEnabled,
-	cr.plugins_.Sprite.prototype.acts.SetY,
-	cr.plugins_.Sprite.prototype.acts.SetCollisions,
-	cr.plugins_.Audio.prototype.acts.StopAll,
-	cr.plugins_.Sprite.prototype.cnds.PickByUID,
-	cr.plugins_.Sprite.prototype.cnds.CompareFrame,
-	cr.plugins_.Sprite.prototype.exps.X,
-	cr.system_object.prototype.acts.WaitForSignal,
-	cr.behaviors.Pin.prototype.acts.Unpin,
-	cr.plugins_.Sprite.prototype.cnds.IsOutsideLayout,
-	cr.system_object.prototype.exps.lerp,
-	cr.plugins_.Sprite.prototype.cnds.IsOverlapping,
-	cr.behaviors.Fade.prototype.acts.SetWaitTime,
-	cr.behaviors.Bullet.prototype.acts.SetAngleOfMotion,
-	cr.behaviors.Bullet.prototype.acts.SetSpeed,
-	cr.behaviors.Fade.prototype.acts.StartFade,
-	cr.plugins_.Sprite.prototype.acts.SetSize,
-	cr.behaviors.Fade.prototype.acts.SetFadeInTime,
-	cr.plugins_.Sprite.prototype.acts.SetVisible,
-	cr.behaviors.Platform.prototype.acts.SetEnabled,
-	cr.system_object.prototype.cnds.ForEach,
-	cr.plugins_.Sprite.prototype.acts.SetX,
-	cr.plugins_.TiledBg.prototype.exps.X,
-	cr.behaviors.Fade.prototype.acts.SetFadeOutTime,
-	cr.plugins_.TiledBg.prototype.acts.SetVisible,
-	cr.plugins_.TiledBg.prototype.acts.SetBoolInstanceVar,
-	cr.plugins_.TiledBg.prototype.cnds.IsBoolInstanceVarSet,
-	cr.plugins_.TiledBg.prototype.acts.SetX,
-	cr.plugins_.Sprite.prototype.cnds.IsBoolInstanceVarSet,
-	cr.plugins_.Sprite.prototype.acts.RotateTowardAngle,
-	cr.plugins_.Sprite.prototype.acts.SetBoolInstanceVar,
-	cr.system_object.prototype.cnds.Every,
-	cr.system_object.prototype.acts.Signal,
-	cr.plugins_.Steam4C2.prototype.acts.UnlockSteamAchievement,
-	cr.plugins_.TiledBg.prototype.acts.Destroy,
-	cr.system_object.prototype.acts.SetTimescale,
-	cr.plugins_.TiledBg.prototype.acts.SetInstanceVar,
-	cr.plugins_.Sprite.prototype.acts.SetPos,
-	cr.plugins_.Text.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.Text.prototype.acts.SubInstanceVar,
-	cr.plugins_.Text.prototype.acts.SetFontSize,
-	cr.system_object.prototype.exps["int"],
-	cr.plugins_.gamepad.prototype.cnds.OnButtonIndexDown,
-	cr.plugins_.gamepad.prototype.cnds.CompareAxis,
-	cr.plugins_.Keyboard.prototype.cnds.IsKeyCodeDown,
-	cr.plugins_.Sprite.prototype.cnds.IsAnimPlaying,
-	cr.system_object.prototype.acts.AddVar,
-	cr.plugins_.Sprite.prototype.acts.SetAnim,
-	cr.plugins_.Sprite.prototype.acts.SetAnimFrame,
-	cr.plugins_.Audio.prototype.acts.SetVolume,
-	cr.plugins_.Spriter.prototype.acts.SetPos,
-	cr.behaviors.Turret.prototype.acts.SetEnabled,
-	cr.plugins_.Spriter.prototype.cnds.OnAnimFinished,
-	cr.plugins_.Spriter.prototype.acts.setAnimation,
-	cr.plugins_.Sprite.prototype.acts.SetMirrored,
+	cr.plugins_.Text.prototype.cnds.OnCreated,
 	cr.behaviors.Flash.prototype.acts.Flash,
-	cr.plugins_.Spriter.prototype.acts.setObjectXFlip,
-	cr.system_object.prototype.cnds.EveryTick,
-	cr.system_object.prototype.acts.SetLayerAngle,
-	cr.plugins_.Sprite.prototype.exps.Angle,
-	cr.behaviors.Sin.prototype.exps.Value,
-	cr.plugins_.Sprite.prototype.acts.MoveToLayer,
-	cr.plugins_.Sprite.prototype.acts.MoveToBottom,
-	cr.plugins_.Spriter.prototype.cnds.IsOnScreen,
-	cr.system_object.prototype.exps.dt,
-	cr.plugins_.Spriter.prototype.acts.setPlaybackSpeedRatio,
-	cr.plugins_.Sprite.prototype.cnds.CompareHeight,
-	cr.plugins_.Spriter.prototype.acts.pauseAnimation,
-	cr.plugins_.TiledBg.prototype.acts.SetSize,
-	cr.plugins_.Spriter.prototype.cnds.CompareX,
-	cr.plugins_.Sprite.prototype.acts.SetEffectEnabled,
-	cr.plugins_.Particles.prototype.acts.Destroy,
-	cr.plugins_.Sprite.prototype.acts.MoveToTop,
-	cr.plugins_.Spriter.prototype.acts.MoveToTop,
-	cr.system_object.prototype.acts.SetLayerVisible,
-	cr.plugins_.Spriter.prototype.acts.MoveToLayer,
-	cr.behaviors.EightDir.prototype.acts.SetEnabled,
-	cr.behaviors.Rotate.prototype.acts.SetSpeed,
-	cr.plugins_.Spriter.prototype.acts.Destroy,
-	cr.plugins_.Spriter.prototype.acts.setOpacity,
-	cr.plugins_.Spriter.prototype.acts.ZMoveToObject,
-	cr.plugins_.Spriter.prototype.acts.SetX,
-	cr.plugins_.Particles.prototype.acts.SetInitSize,
-	cr.plugins_.Spriter.prototype.acts.SetBoolInstanceVar,
-	cr.plugins_.Spriter.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.Spriter.prototype.cnds.IsBoolInstanceVarSet,
-	cr.plugins_.Spriter.prototype.exps.X,
-	cr.plugins_.Spriter.prototype.exps.Y,
-	cr.plugins_.Spriter.prototype.acts.RotateTowardAngle,
-	cr.plugins_.Sprite.prototype.acts.AddInstanceVar,
-	cr.system_object.prototype.acts.SetLayerOpacity,
-	cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
-	cr.behaviors.Rex_pin2imgpt.prototype.acts.Unpin,
-	cr.plugins_.Spriter.prototype.acts.SetVisible,
-	cr.plugins_.Sprite.prototype.acts.SetOpacity,
-	cr.behaviors.Platform.prototype.acts.SetMaxSpeed,
-	cr.behaviors.Platform.prototype.cnds.IsOnFloor,
-	cr.behaviors.Platform.prototype.acts.SimulateControl,
-	cr.system_object.prototype.acts.GoToLayoutByName,
-	cr.system_object.prototype.cnds.Compare,
-	cr.behaviors.Sin.prototype.exps.CyclePosition,
-	cr.behaviors.Sin.prototype.acts.SetPeriod,
-	cr.plugins_.Particles.prototype.acts.SetRate,
-	cr.plugins_.Sprite.prototype.acts.SetEffect,
-	cr.behaviors.Bullet.prototype.acts.SetGravity,
-	cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
-	cr.plugins_.Sprite.prototype.cnds.CompareWidth,
-	cr.plugins_.Sprite.prototype.acts.SetWidth,
-	cr.plugins_.Sprite.prototype.exps.Width,
-	cr.plugins_.Sprite.prototype.exps.Height,
+	cr.plugins_.Sprite.prototype.cnds.CompareX,
+	cr.plugins_.Sprite.prototype.exps.X,
+	cr.plugins_.Sprite.prototype.acts.SetMirrored,
+	cr.plugins_.Sprite.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.SetAnim,
+	cr.behaviors.Sin.prototype.acts.SetActive,
 	cr.plugins_.Sprite.prototype.cnds.OnDestroyed,
-	cr.plugins_.Sprite.prototype.cnds.OnAnimFinished,
-	cr.plugins_.Particles.prototype.acts.SetInitOpacity,
-	cr.plugins_.Sprite.prototype.acts.StopAnim,
-	cr.plugins_.Sprite.prototype.acts.StartAnim,
-	cr.plugins_.Spriter.prototype.cnds.readyForSetup,
-	cr.behaviors.Physics.prototype.acts.SetWorldGravity,
-	cr.behaviors.Physics.prototype.acts.SetEnabled,
+	cr.plugins_.Sprite.prototype.acts.Destroy,
+	cr.plugins_.Text.prototype.acts.Destroy,
+	cr.system_object.prototype.cnds.CompareVar,
+	cr.system_object.prototype.cnds.Every,
+	cr.system_object.prototype.acts.AddVar,
+	cr.plugins_.Function.prototype.acts.CallFunction,
+	cr.system_object.prototype.cnds.TriggerOnce,
+	cr.plugins_.Audio.prototype.acts.PlayByName,
+	cr.plugins_.Sprite.prototype.acts.SetEffectEnabled,
+	cr.system_object.prototype.acts.Wait,
+	cr.system_object.prototype.cnds.OnLayoutStart,
+	cr.plugins_.Mouse.prototype.acts.SetCursor,
+	cr.system_object.prototype.acts.SetLayoutEffectParam,
+	cr.system_object.prototype.acts.CreateObject,
+	cr.system_object.prototype.acts.SetTimescale,
+	cr.plugins_.Sprite.prototype.acts.SetWidth,
+	cr.plugins_.Sprite.prototype.acts.SetX,
+	cr.plugins_.Spritefont2.prototype.acts.SetText,
+	cr.plugins_.Sprite.prototype.acts.ZMoveToObject,
+	cr.plugins_.Text.prototype.acts.SetText,
+	cr.plugins_.Text.prototype.acts.SetFontSize,
+	cr.plugins_.Text.prototype.acts.SetInstanceVar,
+	cr.system_object.prototype.acts.SetLayoutScale,
+	cr.plugins_.Sprite.prototype.acts.SetPos,
+	cr.plugins_.Sprite.prototype.exps.Y,
+	cr.behaviors.Pin.prototype.acts.Pin,
+	cr.system_object.prototype.acts.SetLayerVisible,
+	cr.system_object.prototype.acts.SetGroupActive,
 	cr.system_object.prototype.acts.Scroll,
+	cr.plugins_.Audio.prototype.acts.PreloadByName,
+	cr.system_object.prototype.acts.SetLayerOpacity,
+	cr.system_object.prototype.acts.SetMinimumFramerate,
+	cr.system_object.prototype.acts.SetLayerScale,
+	cr.system_object.prototype.acts.SetVar,
+	cr.plugins_.Sprite.prototype.acts.SetVisible,
+	cr.plugins_.Sprite.prototype.acts.Spawn,
+	cr.plugins_.LocalStorage.prototype.acts.SetItem,
+	cr.plugins_.Browser.prototype.cnds.IsOnline,
+	cr.plugins_.Sprite.prototype.acts.SetInstanceVar,
+	cr.system_object.prototype.exps["int"],
+	cr.plugins_.Sprite.prototype.cnds.IsBoolInstanceVarSet,
+	cr.system_object.prototype.acts.SetObjectTimescale,
+	cr.plugins_.Sprite.prototype.acts.SetPosToObject,
+	cr.system_object.prototype.exps.layoutname,
+	cr.plugins_.Sprite.prototype.acts.SetAngle,
+	cr.behaviors.Sin.prototype.acts.SetMovement,
+	cr.plugins_.Sprite.prototype.acts.SetSize,
+	cr.system_object.prototype.acts.SubVar,
+	cr.behaviors.Fade.prototype.acts.SetWaitTime,
+	cr.plugins_.Sprite.prototype.acts.SetAnimFrame,
+	cr.plugins_.Sprite.prototype.acts.SetEffectParam,
+	cr.plugins_.Sprite.prototype.acts.SetBoolInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.StartAnim,
+	cr.behaviors.Fade.prototype.acts.StartFade,
+	cr.plugins_.Sprite.prototype.cnds.IsOverlapping,
+	cr.plugins_.Audio.prototype.acts.StopAll,
+	cr.behaviors.scrollto.prototype.acts.SetEnabled,
+	cr.plugins_.Sprite.prototype.cnds.OnCollision,
+	cr.system_object.prototype.acts.GoToLayoutByName,
+	cr.plugins_.Sprite.prototype.cnds.IsMirrored,
+	cr.plugins_.Sprite.prototype.cnds.OnCreated,
+	cr.behaviors.Sin.prototype.acts.SetWave,
+	cr.plugins_.Function.prototype.cnds.OnFunction,
+	cr.system_object.prototype.exps.lerp,
 	cr.system_object.prototype.exps.scrollx,
 	cr.system_object.prototype.exps.scrolly,
-	cr.system_object.prototype.acts.SetMinimumFramerate,
-	cr.system_object.prototype.acts.GoToLayout,
-	cr.system_object.prototype.acts.SubVar,
-	cr.system_object.prototype.exps.random,
-	cr.plugins_.Audio.prototype.cnds.OnEnded,
-	cr.plugins_.Arr.prototype.acts.SetX,
-	cr.plugins_.Sprite.prototype.cnds.CompareX,
-	cr.system_object.prototype.acts.SetObjectTimescale,
-	cr.plugins_.Spriter.prototype.acts.SetY,
-	cr.behaviors.Rex_pin2imgpt.prototype.cnds.IsPinned,
-	cr.plugins_.Spriter.prototype.cnds.CompareY,
-	cr.plugins_.Sprite.prototype.cnds.OnCreated,
-	cr.plugins_.Spriter.prototype.acts.resumeAnimation,
-	cr.plugins_.Spriter.prototype.acts.SetAngle,
-	cr.system_object.prototype.acts.RestoreObjectTimescale,
-	cr.plugins_.Spriter.prototype.acts.setVisible,
-	cr.plugins_.Sprite.prototype.acts.SetPosToObject,
-	cr.plugins_.Text.prototype.acts.SetVisible,
-	cr.behaviors.Platform.prototype.acts.SetDoubleJumpEnabled,
+	cr.plugins_.Text.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Sprite.prototype.exps.Width,
+	cr.plugins_.Sprite.prototype.cnds.IsOnScreen,
+	cr.system_object.prototype.cnds.Else,
+	cr.plugins_.Text.prototype.acts.SetAngle,
 	cr.plugins_.Keyboard.prototype.cnds.OnKey,
-	cr.system_object.prototype.cnds.LayerVisible,
-	cr.plugins_.Particles.prototype.acts.SetEffectParam,
-	cr.plugins_.Sprite.prototype.cnds.IsMirrored,
-	cr.behaviors.Turret.prototype.cnds.HasTarget,
-	cr.behaviors.Bullet.prototype.exps.AngleOfMotion,
-	cr.plugins_.Text.prototype.acts.SetText,
-	cr.behaviors.Platform.prototype.acts.SetVectorX,
-	cr.plugins_.TiledBg.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.TiledBg.prototype.cnds.CompareY,
-	cr.plugins_.TiledBg.prototype.acts.SetY,
-	cr.plugins_.TiledBg.prototype.exps.Y,
-	cr.plugins_.Particles.prototype.acts.SetGrowRate,
-	cr.plugins_.TiledBg.prototype.acts.SetPos,
-	cr.plugins_.Sprite.prototype.cnds.IsVisible,
-	cr.plugins_.TiledBg.prototype.cnds.IsVisible,
-	cr.behaviors.Physics.prototype.acts.ApplyImpulse,
-	cr.plugins_.Spriter.prototype.acts.setAnimationLoop,
-	cr.plugins_.Audio.prototype.cnds.IsTagPlaying,
-	cr.behaviors.Turret.prototype.acts.AddTarget,
-	cr.behaviors.Fade.prototype.acts.RestartFade,
-	cr.behaviors.scrollto.prototype.acts.SetEnabled,
-	cr.system_object.prototype.acts.SetLayoutScale,
-	cr.system_object.prototype.acts.SetLayerScale,
-	cr.plugins_.Audio.prototype.acts.SetPlaybackRate,
-	cr.plugins_.Text.prototype.acts.MoveToTop,
-	cr.plugins_.Audio.prototype.acts.RemoveEffects,
-	cr.system_object.prototype.exps.mid,
-	cr.plugins_.TiledBg.prototype.acts.SetWidth,
-	cr.plugins_.TiledBg.prototype.exps.Width,
-	cr.system_object.prototype.acts.LoadState,
-	cr.plugins_.Text.prototype.acts.AddInstanceVar,
+	cr.system_object.prototype.acts.Signal,
 	cr.plugins_.Audio.prototype.acts.Play,
-	cr.plugins_.Spritefont2.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.Spritefont2.prototype.acts.SetText,
-	cr.system_object.prototype.exps.newline,
-	cr.plugins_.Text.prototype.acts.SetInstanceVar,
-	cr.plugins_.Audio.prototype.acts.SetMasterVolume,
-	cr.plugins_.Audio.prototype.acts.SetPaused,
-	cr.plugins_.Arr.prototype.exps.CurValue,
-	cr.plugins_.Arr.prototype.acts.Sort,
-	cr.plugins_.Sprite.prototype.cnds.IsOnLayer,
-	cr.plugins_.Text.prototype.cnds.IsOnLayer,
+	cr.plugins_.gamepad.prototype.cnds.OnButtonIndexDown,
+	cr.plugins_.Text.prototype.cnds.CompareX,
 	cr.plugins_.Text.prototype.acts.SetX,
-	cr.plugins_.Arr.prototype.exps.At,
-	cr.plugins_.Spritefont2.prototype.acts.SetX,
-	cr.plugins_.Spritefont2.prototype.acts.SetInstanceVar,
-	cr.plugins_.Sprite.prototype.exps.AnimationFrame,
+	cr.plugins_.Text.prototype.exps.X,
+	cr.system_object.prototype.exps.dt,
+	cr.behaviors.Platform.prototype.acts.SetDoubleJumpEnabled,
+	cr.plugins_.Sprite.prototype.acts.SubInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.SetOpacity,
+	cr.plugins_.Sprite.prototype.acts.AddInstanceVar,
+	cr.plugins_.Audio.prototype.acts.SetVolume,
 	cr.plugins_.Arr.prototype.cnds.ArrForEach,
-	cr.plugins_.Arr.prototype.cnds.CompareXY,
-	cr.plugins_.Arr.prototype.exps.CurX,
-	cr.plugins_.Text.prototype.cnds.CompareText,
 	cr.plugins_.Arr.prototype.cnds.CompareCurrent,
-	cr.plugins_.Arr.prototype.acts.SetXY,
-	cr.plugins_.Sprite.prototype.exps.AnimationName,
-	cr.plugins_.Spritefont2.prototype.acts.SetVisible,
-	cr.plugins_.Spritefont2.prototype.acts.MoveToTop,
-	cr.plugins_.Text.prototype.acts.SetBoolInstanceVar,
+	cr.plugins_.Arr.prototype.exps.At,
+	cr.plugins_.Arr.prototype.exps.CurX,
+	cr.plugins_.gamepad.prototype.cnds.IsButtonIndexDown,
+	cr.plugins_.Sprite.prototype.cnds.IsAnimPlaying,
+	cr.plugins_.Sprite.prototype.acts.SetCollisions,
+	cr.plugins_.Audio.prototype.acts.Stop,
+	cr.behaviors.scrollto.prototype.acts.Shake,
 	cr.plugins_.Text.prototype.acts.SetFontColor,
 	cr.system_object.prototype.exps.rgb,
-	cr.plugins_.Text.prototype.cnds.IsBoolInstanceVarSet,
-	cr.plugins_.Text.prototype.acts.SetEffectEnabled,
-	cr.plugins_.Text.prototype.acts.SetFontFace,
-	cr.plugins_.Text.prototype.acts.SetPos,
-	cr.system_object.prototype.acts.ScrollY,
-	cr.plugins_.TiledBg.prototype.cnds.IsOnScreen,
-	cr.plugins_.TiledBg.prototype.acts.SetHeight,
-	cr.plugins_.TiledBg.prototype.exps.Height,
-	cr.behaviors.Flash.prototype.acts.StopFlashing,
-	cr.plugins_.Sprite.prototype.cnds.CompareOpacity,
-	cr.plugins_.Text.prototype.exps.X,
-	cr.plugins_.Text.prototype.acts.SetAngle,
-	cr.plugins_.Text.prototype.acts.Destroy,
-	cr.plugins_.Sprite.prototype.cnds.IsCollisionEnabled,
-	cr.plugins_.Text.prototype.exps.Y,
-	cr.plugins_.Text.prototype.cnds.IsOnScreen,
-	cr.plugins_.Text.prototype.cnds.OnCreated,
-	cr.plugins_.Text.prototype.cnds.CompareX,
-	cr.plugins_.Audio.prototype.acts.SetSilent,
-	cr.plugins_.LocalStorage.prototype.acts.CheckItemExists,
-	cr.plugins_.LocalStorage.prototype.cnds.OnItemExists,
-	cr.plugins_.LocalStorage.prototype.cnds.OnItemMissing,
-	cr.system_object.prototype.exps.layoutname,
-	cr.behaviors.Platform.prototype.cnds.OnLand,
-	cr.behaviors.solid.prototype.acts.SetEnabled,
-	cr.behaviors.Platform.prototype.exps.Gravity,
-	cr.plugins_.Sprite.prototype.acts.SetFlipped,
+	cr.behaviors.Pin.prototype.acts.Unpin,
+	cr.behaviors.Bullet.prototype.acts.SetAngleOfMotion,
+	cr.behaviors.Rotate.prototype.acts.SetSpeed,
+	cr.plugins_.Sprite.prototype.acts.SetEffect,
+	cr.behaviors.Platform.prototype.acts.SetEnabled,
+	cr.behaviors.Platform.prototype.acts.SetVectorY,
+	cr.system_object.prototype.acts.WaitForSignal,
+	cr.system_object.prototype.cnds.Repeat,
+	cr.behaviors.Platform.prototype.cnds.IsOnFloor,
+	cr.plugins_.Sprite.prototype.acts.MoveToTop,
+	cr.plugins_.Audio.prototype.acts.SetPlaybackRate,
+	cr.plugins_.Spritefont2.prototype.acts.Destroy,
+	cr.plugins_.Audio.prototype.cnds.IsTagPlaying,
+	cr.plugins_.Sprite.prototype.acts.MoveToBottom,
+	cr.behaviors.Fade.prototype.acts.RestartFade,
+	cr.system_object.prototype.exps.random,
+	cr.plugins_.gamepad.prototype.cnds.OnButtonIndexUp,
+	cr.system_object.prototype.cnds.PickAll,
+	cr.behaviors.Bullet.prototype.acts.SetEnabled,
+	cr.plugins_.Sprite.prototype.acts.SetY,
+	cr.plugins_.Keyboard.prototype.cnds.IsKeyCodeDown,
+	cr.behaviors.Fade.prototype.acts.SetFadeOutTime,
+	cr.plugins_.Sprite.prototype.acts.SetScale,
+	cr.behaviors.Platform.prototype.acts.SimulateControl,
+	cr.plugins_.Sprite.prototype.acts.SetHeight,
+	cr.behaviors.Platform.prototype.cnds.IsJumping,
+	cr.behaviors.Platform.prototype.exps.VectorY,
+	cr.behaviors.Platform.prototype.cnds.IsFalling,
+	cr.plugins_.Sprite.prototype.cnds.OnAnimFinished,
+	cr.behaviors.Platform.prototype.cnds.IsMoving,
+	cr.behaviors.Flash.prototype.cnds.IsFlashing,
+	cr.plugins_.Sprite.prototype.cnds.IsVisible,
+	cr.system_object.prototype.cnds.EveryTick,
+	cr.system_object.prototype.cnds.Compare,
+	cr.system_object.prototype.exps.mid,
+	cr.system_object.prototype.cnds.ForEach,
+	cr.behaviors.Turret.prototype.acts.SetEnabled,
+	cr.plugins_.Sprite.prototype.acts.StopAnim,
+	cr.behaviors.EightDir.prototype.acts.SimulateControl,
+	cr.behaviors.Turret.prototype.acts.AddTarget,
+	cr.behaviors.Turret.prototype.cnds.HasTarget,
+	cr.plugins_.Sprite.prototype.acts.SetTowardPosition,
+	cr.plugins_.Sprite.prototype.exps.Angle,
+	cr.behaviors.Bullet.prototype.acts.SetSpeed,
+	cr.behaviors.Sin.prototype.acts.SetPeriod,
+	cr.behaviors.Sin.prototype.exps.Period,
+	cr.plugins_.Text.prototype.acts.ZMoveToObject,
+	cr.behaviors.Sin.prototype.cnds.IsActive,
+	cr.behaviors.Sin.prototype.exps.CyclePosition,
+	cr.plugins_.Browser.prototype.acts.Vibrate,
+	cr.plugins_.Text.prototype.acts.SetVisible,
 	cr.behaviors.Platform.prototype.acts.SetGravity,
-	cr.system_object.prototype.cnds.EffectsSupported,
-	cr.plugins_.gamepad.prototype.cnds.IsButtonIndexDown,
-	cr.plugins_.Keyboard.prototype.cnds.IsKeyDown,
-	cr.system_object.prototype.cnds.OnLoadComplete,
-	cr.plugins_.Particles.prototype.acts.SetVisible,
-	cr.plugins_.LocalStorage.prototype.acts.SetItem,
+	cr.behaviors.Platform.prototype.acts.SetMaxSpeed,
+	cr.behaviors.Platform.prototype.acts.SetVectorX,
+	cr.plugins_.Sprite.prototype.cnds.CompareFrame,
+	cr.plugins_.Sprite.prototype.cnds.CompareOpacity,
+	cr.plugins_.Sprite.prototype.cnds.CompareY,
+	cr.plugins_.Spritefont2.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Spritefont2.prototype.acts.SetVisible,
+	cr.plugins_.Spritefont2.prototype.acts.MoveToTop,
+	cr.system_object.prototype.exps.newline,
+	cr.plugins_.Arr.prototype.exps.CurValue,
+	cr.plugins_.Spritefont2.prototype.acts.SetX,
+	cr.plugins_.Spritefont2.prototype.acts.SetInstanceVar,
+	cr.plugins_.Arr.prototype.acts.Sort,
+	cr.plugins_.Text.prototype.acts.SetEffectParam,
+	cr.plugins_.Text.prototype.acts.SetBoolInstanceVar,
+	cr.plugins_.Text.prototype.cnds.CompareText,
+	cr.plugins_.Text.prototype.cnds.IsBoolInstanceVarSet,
+	cr.plugins_.Arr.prototype.acts.SetX,
+	cr.plugins_.Sprite.prototype.exps.AnimationName,
+	cr.plugins_.Spritefont2.prototype.acts.SetBoolInstanceVar,
+	cr.plugins_.Arr.prototype.cnds.CompareXY,
+	cr.plugins_.Arr.prototype.acts.SetXY,
+	cr.plugins_.Text.prototype.acts.SetPos,
+	cr.plugins_.Spritefont2.prototype.acts.SetHAlign,
+	cr.plugins_.Spritefont2.prototype.acts.SetWidth,
 	cr.system_object.prototype.exps.floor,
 	cr.system_object.prototype.exps.wallclocktime,
-	cr.system_object.prototype.acts.SaveState,
-	cr.plugins_.Steam4C2.prototype.acts.enableCloud,
-	cr.system_object.prototype.cnds.OnSaveComplete,
-	cr.system_object.prototype.cnds.OnSaveFailed,
-	cr.plugins_.Sprite.prototype.exps.Opacity,
-	cr.plugins_.Text.prototype.acts.SetPosToObject,
-	cr.plugins_.LocalStorage.prototype.exps.ItemValue,
-	cr.plugins_.Browser.prototype.acts.CancelFullScreen,
-	cr.plugins_.Browser.prototype.acts.RequestFullScreen,
-	cr.plugins_.Steam4C2.prototype.exps.getAppIDSteam,
-	cr.behaviors.Platform.prototype.cnds.IsJumping,
-	cr.plugins_.Touch.prototype.cnds.IsTouchingObject,
-	cr.behaviors.Platform.prototype.exps.VectorY,
-	cr.behaviors.Platform.prototype.cnds.IsMoving,
-	cr.behaviors.Platform.prototype.cnds.IsFalling,
-	cr.behaviors.Bullet.prototype.cnds.CompareSpeed,
-	cr.behaviors.scrollto.prototype.acts.Shake,
-	cr.behaviors.EightDir.prototype.acts.SimulateControl,
-	cr.behaviors.EightDir.prototype.cnds.IsMoving,
-	cr.behaviors.Rotate.prototype.acts.SetAcceleration,
-	cr.plugins_.Mouse.prototype.acts.SetCursor,
-	cr.plugins_.List.prototype.acts.Select,
-	cr.system_object.prototype.cnds.CompareTime,
-	cr.plugins_.Browser.prototype.acts.Close,
-	cr.plugins_.List.prototype.cnds.CompareInstanceVar,
-	cr.plugins_.List.prototype.exps.SelectedIndex,
-	cr.plugins_.List.prototype.acts.SetVisible,
-	cr.plugins_.List.prototype.exps.SelectedText,
-	cr.plugins_.sliderbar.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.List.prototype.acts.Destroy,
+	cr.plugins_.sliderbar.prototype.acts.Destroy,
+	cr.plugins_.Text.prototype.acts.SetWidth,
+	cr.system_object.prototype.acts.SetLayoutEffectEnabled,
+	cr.plugins_.htmlCODE.prototype.acts.SetVisible,
+	cr.plugins_.Audio.prototype.acts.SetPaused,
+	cr.system_object.prototype.acts.RestoreObjectTimescale,
+	cr.plugins_.Sprite.prototype.exps.UID,
+	cr.plugins_.Spritefont2.prototype.acts.SetScale,
+	cr.behaviors.Fade.prototype.acts.SetFadeInTime,
+	cr.system_object.prototype.acts.ResetGlobals,
+	cr.system_object.prototype.acts.ResetPersisted,
+	cr.system_object.prototype.acts.GoToLayout,
+	cr.plugins_.Text.prototype.acts.SetOpacity,
+	cr.plugins_.Text.prototype.acts.SetEffectEnabled,
+	cr.plugins_.Sprite.prototype.cnds.IsOnLayer,
 	cr.plugins_.sliderbar.prototype.acts.SetValue,
+	cr.plugins_.sliderbar.prototype.exps.Value,
+	cr.plugins_.List.prototype.acts.SetSize,
+	cr.plugins_.List.prototype.acts.SetInstanceVar,
+	cr.plugins_.List.prototype.acts.Select,
+	cr.plugins_.sliderbar.prototype.acts.SetVisible,
+	cr.plugins_.List.prototype.acts.SetVisible,
+	cr.plugins_.Text.prototype.acts.SetY,
+	cr.plugins_.List.prototype.exps.SelectedIndex,
+	cr.plugins_.List.prototype.cnds.CompareSelection,
+	cr.plugins_.Text.prototype.acts.AddInstanceVar,
+	cr.plugins_.Text.prototype.acts.SubInstanceVar,
+	cr.plugins_.Text.prototype.acts.MoveToTop,
+	cr.system_object.prototype.exps.fps,
+	cr.plugins_.Text.prototype.exps.Y,
+	cr.plugins_.Button.prototype.acts.Destroy,
+	cr.plugins_.Browser.prototype.acts.Close,
+	cr.plugins_.Audio.prototype.acts.SetMuted,
 	cr.plugins_.Sprite.prototype.acts.SetAnimSpeed,
-	cr.plugins_.TiledBg.prototype.acts.SetEffectParam,
-	cr.plugins_.Spriter.prototype.acts.AddInstanceVar,
-	cr.plugins_.Spriter.prototype.acts.SubInstanceVar,
-	cr.plugins_.Audio.prototype.exps.MasterVolume
+	cr.plugins_.Sprite.prototype.cnds.IsCollisionEnabled,
+	cr.behaviors.Pin.prototype.cnds.IsPinned,
+	cr.behaviors.Turret.prototype.acts.ClearTargets,
+	cr.behaviors.Sin.prototype.acts.SetMagnitude,
+	cr.plugins_.Sprite.prototype.acts.RotateTowardPosition,
+	cr.plugins_.Particles.prototype.acts.SetAngle,
+	cr.plugins_.Particles.prototype.acts.SetInitOpacity,
+	cr.plugins_.Sprite.prototype.cnds.PickByUID,
+	cr.behaviors.solid.prototype.acts.SetEnabled,
+	cr.behaviors.EightDir.prototype.acts.SetEnabled,
+	cr.plugins_.Audio.prototype.acts.SetMasterVolume,
+	cr.plugins_.Audio.prototype.acts.RemoveEffects,
+	cr.plugins_.TiledBg.prototype.acts.SetInstanceVar,
+	cr.system_object.prototype.acts.ScrollToObject,
+	cr.plugins_.TiledBg.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.TiledBg.prototype.acts.SetWidth,
+	cr.plugins_.TiledBg.prototype.acts.AddInstanceVar,
+	cr.plugins_.TiledBg.prototype.acts.SetX,
+	cr.plugins_.TiledBg.prototype.exps.X,
+	cr.plugins_.TiledBg.prototype.acts.SubInstanceVar,
+	cr.system_object.prototype.acts.SetLayerAngle,
+	cr.behaviors.Sin.prototype.acts.SetPhase,
+	cr.behaviors.Bullet.prototype.acts.SetGravity,
+	cr.behaviors.Platform.prototype.acts.SetJumpStrength,
+	cr.plugins_.Audio.prototype.acts.AddFilterEffect,
+	cr.system_object.prototype.exps.layerangle,
+	cr.system_object.prototype.exps.layoutangle,
+	cr.system_object.prototype.acts.SetLayoutAngle,
+	cr.plugins_.Sprite.prototype.acts.SetFlipped,
+	cr.behaviors.Turret.prototype.acts.SetRange,
+	cr.plugins_.LocalStorage.prototype.acts.CheckItemExists,
+	cr.plugins_.LocalStorage.prototype.cnds.OnItemExists,
+	cr.plugins_.LocalStorage.prototype.exps.ItemValue,
+	cr.system_object.prototype.cnds.CompareTime,
+	cr.system_object.prototype.cnds.LayerVisible,
+	cr.plugins_.Keyboard.prototype.cnds.IsKeyDown,
+	cr.plugins_.Keyboard.prototype.cnds.OnKeyCode,
+	cr.plugins_.Text.prototype.acts.SetPosToObject,
+	cr.plugins_.LocalStorage.prototype.acts.RemoveItem,
+	cr.plugins_.LocalStorage.prototype.cnds.OnItemMissing,
+	cr.system_object.prototype.acts.LoadState,
+	cr.system_object.prototype.acts.SaveState,
+	cr.system_object.prototype.cnds.OnLoadComplete,
+	cr.plugins_.List.prototype.exps.SelectedText,
+	cr.plugins_.List.prototype.cnds.CompareInstanceVar,
+	cr.plugins_.Sprite.prototype.acts.RotateTowardAngle,
+	cr.plugins_.Sprite.prototype.exps.Opacity,
+	cr.behaviors.Bullet.prototype.cnds.CompareSpeed,
+	cr.plugins_.Sprite.prototype.exps.Height,
+	cr.plugins_.Text.prototype.acts.SetSize,
+	cr.plugins_.Particles.prototype.acts.Destroy
 ];};

@@ -3,42 +3,8 @@
 <head>
     <meta charset="UTF-8" />
 	<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-	<title>Metamorfose S</title>
-	<script>
-    window.process = { 
-        versions: { node: 'true' }, 
-        cwd: function() { return ''; },
-        env: { HOME: '', USERPROFILE: '', APPDATA: '' }
-    };
-	window.require = window.require || function(moduleName) {
-        console.warn("Módulo simulado:", moduleName);
-        if (moduleName === 'path') {
-            return {
-                dirname: function(p) { return p ? p.substring(0, p.lastIndexOf('/') || p.lastIndexOf('\\')) : ''; },
-                join: function() { return Array.prototype.slice.call(arguments).join('/'); },
-                extname: function(p) { return p ? p.substring(p.lastIndexOf('.')) : ''; }
-            };
-        }
-        if (moduleName === 'os') {
-            return { homedir: function() { return ''; } };
-        }
-		if (moduleName === './Steam4C2' || moduleName === 'Steam4C2') {
-            return {
-                initAPI: function() { return true; },
-                isSteamRunning: function() { return false; },
-                getSteamId: function() { return "123456789"; },
-                IsLowViolence: function() { return false; },
-                isSubscribedApp: function() { return true; },
-                getPersonaName: function() { return "JogadorTeste"; },
-                getCloudQuota: function(cb) { if(cb) cb(0, 0, 0); return true; } // Adicionado para corrigir o erro atual
-            };
-        }
-        return {
-            initAPI: function() { return true; }
-        };
-    };
-    window.nw = window.nw || { App: { quit: function() {} }, Window: { get: function() { return { show: function() {}, on: function() {} }; } } };
-</script>
+	<title>Ricks Hunter</title>
+
     <!-- All margins and padding must be zero for the canvas to fill the screen. -->
 	<style type="text/css">
 		* {
@@ -59,8 +25,29 @@
 			-ms-touch-action: none;
 		}
     </style>
-	
-
+	<script>
+    // Simulação completa do Node.js/NW.js para navegadores
+    window.process = { 
+        versions: { node: 'true' }, 
+        cwd: function() { return ''; },
+        env: { HOME: '', USERPROFILE: '' }
+    };
+    window.require = window.require || function(moduleName) {
+        console.warn("Módulo simulado:", moduleName);
+        if (moduleName === 'path') {
+            return {
+                dirname: function(p) { return p ? p.substring(0, p.lastIndexOf('/') || p.lastIndexOf('\\')) : ''; },
+                join: function() { return Array.prototype.slice.call(arguments).join('/'); },
+                extname: function(p) { return p ? p.substring(p.lastIndexOf('.')) : ''; }
+            };
+        }
+        if (moduleName === 'fs' || moduleName === 'child_process') {
+            return {};
+        }
+        return {};
+    };
+    window.nw = window.nw || { App: { quit: function() {} }, Window: { get: function() { return { show: function() {}, on: function() {} }; } } };
+</script>
 </head> 
  
 <body> 
@@ -71,7 +58,7 @@
 	
 		<!-- The canvas the project will render to.  If you change its ID, don't forget to change the
 		ID the runtime looks for in the jQuery events above (ready() and cr_sizeCanvas()). -->
-		<canvas id="c2canvas" width="1280" height="720"></canvas>
+		<canvas id="c2canvas" width="426" height="240"></canvas>
 		
 	</div>
 	
@@ -85,7 +72,6 @@
 	<!-- Construct 2 exported games require jQuery. -->
 	<script src="jquery-2.1.1.min.js"></script>
 
-	<!-- <script src="Steam4C2.js"></script> -->
 
 	
     <!-- The runtime script.  You can rename it, but don't forget to rename the reference here as well.
@@ -133,7 +119,7 @@
 		document.addEventListener("webkitvisibilitychange", onVisibilityChanged, false);
 		document.addEventListener("msvisibilitychange", onVisibilityChanged, false);
 		
-		// Work around NWjs ghost process bug
+		// Work around NWjs ghost process bug if running in desktop environment
 		if (window["nwgui"] && window["nwgui"].Window) {
 			var win = window['nwgui'].Window.get();
 			win.on('close', function () {

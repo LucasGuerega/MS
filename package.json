@@ -1,19 +1,19 @@
 {
 	"main": "index.html",
-	"name": "MetamorfoseS",
-	"description": "plataforma",
+	"name": "RicksHunter",
+	"description": "nw",
 	"version": "1.0.0.0",
 	"window": {
 		"icon": "icon-128.png",
-		"width": 1280,
-		"height": 720,
+		"width": 426,
+		"height": 240,
 		"position": "center",
 		"resizable": true,
 		"frame": true,
-		"kiosk": false,
+		"kiosk": true,
 		"show": false
 	},
 	"dom_storage_quota": 50,
 	"user-agent": "Mozilla/5.0 (%osinfo) AppleWebKit/%webkit_ver (KHTML, like Gecko, Chrome, Safari) NWjs/%nwver",
-	"chromium-args": "--disable-plugins --disable-internal-flash --disable-popup-blocking --enable-gamepad --enable-html5-camera --allow-file-access-from-files --ignore-gpu-blacklist --in-process-gpu --disable-devtools"
+	"chromium-args": "--disable-plugins --disable-internal-flash --disable-popup-blocking --enable-gamepad --enable-html5-camera --allow-file-access-from-files --disable-software-rasterizer --ignore-gpu-blacklist"
 }
