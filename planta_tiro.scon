@@ -1,0 +1,332 @@
+{
+	"entity": [
+		{
+			"animation": [
+				{
+					"id": 0,
+					"interval": 100,
+					"length": 4000,
+					"looping": "false",
+					"mainline": {
+						"key": [
+							{
+								"bone_ref": [],
+								"id": 0,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 0,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								]
+							},
+							{
+								"bone_ref": [],
+								"id": 1,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 1,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 263
+							},
+							{
+								"bone_ref": [],
+								"id": 2,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 2,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 698
+							},
+							{
+								"bone_ref": [],
+								"id": 3,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 3,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 1049
+							},
+							{
+								"bone_ref": [],
+								"id": 4,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 4,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 1545
+							},
+							{
+								"bone_ref": [],
+								"id": 5,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 5,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 2048
+							},
+							{
+								"bone_ref": [],
+								"id": 6,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 6,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 2551
+							},
+							{
+								"bone_ref": [],
+								"id": 7,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 7,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 3043
+							},
+							{
+								"bone_ref": [],
+								"id": 8,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 8,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 3463
+							},
+							{
+								"bone_ref": [],
+								"id": 9,
+								"object_ref": [
+									{
+										"id": 0,
+										"key": 9,
+										"timeline": "0",
+										"z_index": "0"
+									}
+								],
+								"time": 3924
+							}
+						]
+					},
+					"name": "parado",
+					"timeline": [
+						{
+							"id": 0,
+							"key": [
+								{
+									"id": 0,
+									"object": {
+										"angle": 0,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 0,
+										"scale_y": 0,
+										"x": 0.661808,
+										"y": 1.325381
+									},
+									"spin": 0
+								},
+								{
+									"id": 1,
+									"object": {
+										"angle": 0,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"x": 0.661808,
+										"y": 1.325381
+									},
+									"spin": 0,
+									"time": 263
+								},
+								{
+									"id": 2,
+									"object": {
+										"angle": 0,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"x": 0.661808,
+										"y": 1.325381
+									},
+									"time": 698
+								},
+								{
+									"id": 3,
+									"object": {
+										"angle": 80.69472786443771,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 1.0000000000000002,
+										"x": -60.26166331297281,
+										"y": 1.325381
+									},
+									"time": 1049
+								},
+								{
+									"id": 4,
+									"object": {
+										"angle": 180.67283540583543,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 1.0000000000000002,
+										"x": -188.30421319108515,
+										"y": 1.325381
+									},
+									"time": 1545
+								},
+								{
+									"id": 5,
+									"object": {
+										"angle": 274.12070602428844,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 1.0000000000000002,
+										"x": -318.1538151844128,
+										"y": 1.325381
+									},
+									"time": 2048
+								},
+								{
+									"id": 6,
+									"object": {
+										"angle": 358.95897823691644,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 0.9999999999999991,
+										"x": -448.51971778208764,
+										"y": 1.325381
+									},
+									"time": 2551
+								},
+								{
+									"id": 7,
+									"object": {
+										"angle": 152.2441537074602,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 0.9999999999999984,
+										"scale_y": 1.0000000000000007,
+										"x": -575.5296664515055,
+										"y": 1.325381
+									},
+									"time": 3043
+								},
+								{
+									"id": 8,
+									"object": {
+										"angle": 197.43896156872415,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"scale_x": 0.999999999999997,
+										"scale_y": 0.9999999999999996,
+										"x": -646.2628492470756,
+										"y": 1.3253810000000001
+									},
+									"time": 3463
+								},
+								{
+									"id": 9,
+									"object": {
+										"angle": 0,
+										"file": 0,
+										"folder": 0,
+										"pivot_x": 0.487543,
+										"pivot_y": 0.47331999999999996,
+										"x": -705.8955690491804,
+										"y": 1.3253810000000001
+									},
+									"spin": 0,
+									"time": 3924
+								}
+							],
+							"name": "planta1_0001_1-copy",
+							"obj": 0
+						}
+					]
+				}
+			],
+			"character_map": [],
+			"id": 0,
+			"name": "entity_000",
+			"obj_info": [
+				{
+					"frames": [
+						{
+							"file": 0,
+							"folder": 0
+						}
+					],
+					"name": "planta1_0001_1-copy",
+					"type": "sprite"
+				}
+			]
+		}
+	],
+	"folder": [
+		{
+			"file": [
+				{
+					"height": 45,
+					"id": 0,
+					"name": "planta1_0001_1-copy.png",
+					"pivot_x": 0,
+					"pivot_y": 1,
+					"width": 48
+				}
+			],
+			"id": 0
+		}
+	],
+	"generator": "BrashMonkey Spriter",
+	"generator_version": "r10",
+	"scon_version": "1.0"
+}
